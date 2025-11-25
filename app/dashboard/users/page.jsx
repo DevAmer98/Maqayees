@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 
 const ROLE_FILTERS = [
   { label: "All Personnel", value: "all" },
@@ -15,7 +15,7 @@ const ROLE_FILTERS = [
 
 const formatRole = (role) => role?.replace(/_/g, " ") ?? "";
 
-export default function UsersPage() {
+function UsersPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const roleParam = searchParams.get("role") ?? "all";
@@ -261,5 +261,19 @@ export default function UsersPage() {
         </section>
       </main>
     </div>
+  );
+}
+
+export default function UsersPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center text-sm text-gray-500">
+          Loading team directory...
+        </div>
+      }
+    >
+      <UsersPageContent />
+    </Suspense>
   );
 }
