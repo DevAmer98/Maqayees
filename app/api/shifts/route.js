@@ -10,8 +10,6 @@ export const runtime = "nodejs";
 const requiredEnvKeys = ["SYNOLOGY_HOST", "SYNOLOGY_PORT", "SYNOLOGY_USER", "SYNOLOGY_PASSWORD", "SYNOLOGY_SHIFT_PATH"];
 const hasSynologyConfig = () => requiredEnvKeys.every((key) => !!process.env[key]);
 
-const localUploadRoot = path.join(process.cwd(), "public", "uploads", "shifts");
-
 async function uploadToSynology(localFilePath, remoteFilePath) {
   const client = new Client();
   client.ftp.verbose = false;
@@ -32,27 +30,22 @@ async function uploadToSynology(localFilePath, remoteFilePath) {
   return normalizedPath;
 }
 
-async function saveFileToTemp(file, tempDir, prefix) {
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const fileName = `${prefix}-${Date.now()}-${sanitizedName || "upload"}`;
+function sanitizeFileName(value, fallback = "upload") {
+  if (!value) return fallback;
+  const sanitized = value.replace(/[^a-zA-Z0-9._-]/g, "_");
+  return sanitized || fallback;
+}
+
+async function downloadRemoteFile(url, tempDir, fileName) {
+  if (!tempDir) throw new Error("tempDir is required to download remote files.");
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to download uploaded file from ${url}`);
+  }
+  const buffer = Buffer.from(await response.arrayBuffer());
   const tempPath = path.join(tempDir, fileName);
   await fs.writeFile(tempPath, buffer);
   return tempPath;
-}
-
-function normalizeFileKey(key) {
-  if (!key) return key;
-  if (key === "vehiclePhotos" || key.startsWith("vehiclePhotos")) return "vehiclePhotos";
-  if (key === "odometerPhoto" || key.startsWith("odometerPhoto")) return "odometerPhoto";
-  return key;
-}
-
-async function copyToLocalUploads(tempPath, relativePath) {
-  const destination = path.join(localUploadRoot, relativePath);
-  await fs.mkdir(path.dirname(destination), { recursive: true });
-  await fs.copyFile(tempPath, destination);
-  return `/uploads/shifts/${relativePath.replace(/\\/g, "/")}`;
 }
 
 function sanitizeIdentifier(value, fallbackPrefix = "shift") {
@@ -60,6 +53,78 @@ function sanitizeIdentifier(value, fallbackPrefix = "shift") {
   const sanitized = trimmed.replace(/[^a-zA-Z0-9_-]/g, "_");
   if (sanitized) return sanitized;
   return `${fallbackPrefix}-${Date.now()}`;
+}
+
+function ensureUploadPayload(upload) {
+  if (!upload || typeof upload.url !== "string") {
+    throw new Error("Uploaded file metadata is missing the \"url\" property.");
+  }
+}
+
+async function processUploadedFile({ upload, prefix, synologyBase, tempDir, cleanupPaths }) {
+  ensureUploadPayload(upload);
+  const sanitizedOriginal = sanitizeFileName(upload.originalName || path.basename(upload.pathname || prefix));
+  const ext = path.extname(upload.pathname || "") || path.extname(upload.originalName || "") || ".jpg";
+  const remotePathCandidate = synologyBase ? `${synologyBase}/${prefix}${ext}` : null;
+
+  let storedPath = upload.url;
+  let location = "blob";
+
+  if (remotePathCandidate && tempDir) {
+    try {
+      const tempFileName = `${prefix}-${Date.now()}${ext}`;
+      const tempPath = await downloadRemoteFile(upload.url, tempDir, tempFileName);
+      cleanupPaths.push(tempPath);
+      storedPath = await uploadToSynology(tempPath, remotePathCandidate);
+      location = "synology";
+    } catch (error) {
+      console.error("Synology upload failed, keeping blob URL:", error);
+    }
+  }
+
+  return {
+    originalName: sanitizedOriginal,
+    remotePath: storedPath,
+    blobPath: upload.pathname || null,
+    blobUrl: upload.url,
+    location,
+    contentType: upload.contentType || null,
+  };
+}
+
+async function resolveUploads({ uploadsPayload, synologyBase, tempDir, cleanupPaths }) {
+  if (!uploadsPayload?.odometerPhoto) {
+    throw new Error("An odometer photo upload is required.");
+  }
+  if (!Array.isArray(uploadsPayload.vehiclePhotos) || uploadsPayload.vehiclePhotos.length === 0) {
+    throw new Error("At least one vehicle photo upload is required.");
+  }
+
+  const uploads = {
+    odometerPhoto: await processUploadedFile({
+      upload: uploadsPayload.odometerPhoto,
+      prefix: "odometer",
+      synologyBase,
+      tempDir,
+      cleanupPaths,
+    }),
+    vehiclePhotos: [],
+  };
+
+  for (let index = 0; index < uploadsPayload.vehiclePhotos.length; index += 1) {
+    const fileUpload = uploadsPayload.vehiclePhotos[index];
+    const prefix = `vehicle-${index + 1}`;
+    const result = await processUploadedFile({
+      upload: fileUpload,
+      prefix,
+      synologyBase,
+      tempDir,
+      cleanupPaths,
+    });
+    uploads.vehiclePhotos.push(result);
+  }
+
+  return uploads;
 }
 
 async function loadShiftRecord(shiftId) {
@@ -139,23 +204,7 @@ export async function POST(req) {
   let tempDir;
 
   try {
-    const formData = await req.formData();
-    const payload = {};
-    const fileBuckets = {
-      odometerPhoto: [],
-      vehiclePhotos: [],
-    };
-
-    for (const [key, value] of formData.entries()) {
-      if (value instanceof File) {
-        const normalized = normalizeFileKey(key);
-        if (fileBuckets[normalized]) {
-          fileBuckets[normalized].push(value);
-        }
-      } else {
-        payload[key] = value;
-      }
-    }
+    const payload = await req.json();
 
     const eventTypeRaw = (payload.eventType || "").toLowerCase();
     if (!["start", "end"].includes(eventTypeRaw)) {
@@ -167,16 +216,12 @@ export async function POST(req) {
       return NextResponse.json({ success: false, error: "Mileage must be a positive number." }, { status: 400 });
     }
 
-    if (!fileBuckets.odometerPhoto.length) {
-      return NextResponse.json({ success: false, error: "An odometer photo is required." }, { status: 400 });
-    }
-
-    if (!fileBuckets.vehiclePhotos.length) {
-      return NextResponse.json({ success: false, error: "At least one vehicle photo is required." }, { status: 400 });
-    }
-
     if (eventTypeRaw === "end" && !payload.shiftId) {
       return NextResponse.json({ success: false, error: "shiftId is required to close a shift." }, { status: 400 });
+    }
+
+    if (!payload.uploads) {
+      return NextResponse.json({ success: false, error: "Uploaded file metadata is required." }, { status: 400 });
     }
 
     const shiftId = sanitizeIdentifier(payload.shiftId || `shift-${Date.now()}`);
@@ -185,55 +230,16 @@ export async function POST(req) {
       ? `${process.env.SYNOLOGY_SHIFT_PATH.replace(/\/$/, "")}/${shiftId}/${eventTypeRaw}`
       : null;
 
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "maq-shift-"));
-    const uploads = {
-      odometerPhoto: null,
-      vehiclePhotos: [],
-    };
-
-    for (const category of Object.keys(fileBuckets)) {
-      const files = fileBuckets[category];
-      for (let index = 0; index < files.length; index += 1) {
-        const file = files[index];
-        const tempPath = await saveFileToTemp(file, tempDir, `${category}-${eventTypeRaw}`);
-        cleanupPaths.push(tempPath);
-        const ext = path.extname(file.name) || ".jpg";
-        const prefix = category === "odometerPhoto" ? "odometer" : `vehicle-${index + 1}`;
-        const fileName = `${prefix}${ext}`;
-        const localRelativePath = `${shiftId}/${eventTypeRaw}/${fileName}`;
-        const remotePathCandidate = synologyBase ? `${synologyBase}/${fileName}` : null;
-
-        let storedPath;
-        let location = "local";
-
-        if (remotePathCandidate) {
-          try {
-            storedPath = await uploadToSynology(tempPath, remotePathCandidate);
-            location = "synology";
-          } catch (error) {
-            console.error("Synology upload failed, falling back to local storage:", error);
-          }
-        }
-
-        if (!storedPath) {
-          storedPath = await copyToLocalUploads(tempPath, localRelativePath);
-          location = location === "synology" ? "synology-fallback" : "local";
-        }
-
-        const fileInfo = {
-          originalName: file.name,
-          remotePath: storedPath,
-          localPath: !remotePathCandidate || location !== "synology" ? storedPath : null,
-          location,
-        };
-
-        if (category === "odometerPhoto") {
-          uploads.odometerPhoto = fileInfo;
-        } else {
-          uploads.vehiclePhotos.push(fileInfo);
-        }
-      }
+    if (synologyBase) {
+      tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "maq-shift-"));
     }
+
+    const uploads = await resolveUploads({
+      uploadsPayload: payload.uploads,
+      synologyBase,
+      tempDir,
+      cleanupPaths,
+    });
 
     const record = await persistShiftRecord({
       shiftId,

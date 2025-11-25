@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@prisma/client": "^6.18.0",
+    "@vercel/blob": "^2.0.0",
     "basic-ftp": "^5.0.5",
     "bcrypt": "^6.0.0",
     "framer-motion": "^12.23.24",

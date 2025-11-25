@@ -4,9 +4,43 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSearchParams } from "next/navigation";
+import { upload } from "@vercel/blob/client";
 import LogoutButton from "@/components/ui/LogoutButton";
 
 const MAX_VEHICLE_PHOTOS = 4;
+const SHIFT_UPLOAD_HANDLE_URL = "/api/uploads/shifts";
+
+const generateClientShiftId = () => {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return `shift-${crypto.randomUUID()}`;
+  }
+  return `shift-${Date.now()}`;
+};
+
+const sanitizeUploadName = (name) => {
+  if (!name) return "upload";
+  const sanitized = name.replace(/[^a-zA-Z0-9._-]/g, "_");
+  return sanitized || "upload";
+};
+
+async function uploadShiftAsset({ file, shiftId, eventType, label }) {
+  const safeName = sanitizeUploadName(file.name);
+  const pathname = `driver-shifts/${shiftId}/${eventType}/${label}-${Date.now()}-${safeName}`;
+  const blob = await upload(pathname, file, {
+    access: "public",
+    handleUploadUrl: SHIFT_UPLOAD_HANDLE_URL,
+    contentType: file.type || "application/octet-stream",
+    clientPayload: JSON.stringify({ shiftId, eventType, label }),
+  });
+
+  return {
+    originalName: file.name,
+    url: blob.url,
+    downloadUrl: blob.downloadUrl,
+    pathname: blob.pathname,
+    contentType: blob.contentType,
+  };
+}
 
 export default function DriverDashboard() {
   const [onShift, setOnShift] = useState(false);
@@ -38,6 +72,31 @@ export default function DriverDashboard() {
   const driverEmailParam = searchParams.get("driverEmail");
   const [activeTab, setActiveTab] = useState(defaultTab);
   const isRTL = lang === "ar" || lang === "ur";
+
+  const prepareUploadPayload = useCallback(async ({ shiftId, eventType, odometerPhoto, vehiclePhotos }) => {
+    const odometerUpload = await uploadShiftAsset({
+      file: odometerPhoto,
+      shiftId,
+      eventType,
+      label: "odometer",
+    });
+
+    const vehicleUploads = await Promise.all(
+      vehiclePhotos.map((file, index) =>
+        uploadShiftAsset({
+          file,
+          shiftId,
+          eventType,
+          label: `vehicle-${index + 1}`,
+        })
+      )
+    );
+
+    return {
+      odometerPhoto: odometerUpload,
+      vehiclePhotos: vehicleUploads,
+    };
+  }, []);
 
   // 🌍 Translations
   const t = {
@@ -413,22 +472,33 @@ export default function DriverDashboard() {
     setStartSubmitting(true);
 
     try {
-      const formData = new FormData();
-      formData.append("eventType", "start");
-      formData.append("mileage", parsedStart.toString());
-      formData.append("recordedAt", new Date().toISOString());
-      if (driver?.name) formData.append("driverName", driver.name);
-      if (driver?.email) formData.append("driverEmail", driver.email);
-      if (driver?.phone) formData.append("driverPhone", driver.phone);
-      if (vehicle?.id) formData.append("vehicleId", vehicle.id);
-      if (vehicle?.plateNumber) formData.append("vehiclePlate", vehicle.plateNumber);
-      if (vehicle?.project) formData.append("projectName", vehicle.project);
-      formData.append("odometerPhoto", startMileagePhoto);
-      startVehiclePhotos.forEach((file) => formData.append("vehiclePhotos", file));
+      const candidateShiftId = activeShiftId || generateClientShiftId();
+      const uploads = await prepareUploadPayload({
+        shiftId: candidateShiftId,
+        eventType: "start",
+        odometerPhoto: startMileagePhoto,
+        vehiclePhotos: startVehiclePhotos,
+      });
 
       const response = await fetch("/api/shifts", {
         method: "POST",
-        body: formData,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          shiftId: candidateShiftId,
+          eventType: "start",
+          mileage: parsedStart,
+          recordedAt: new Date().toISOString(),
+          driverId: driver?.id,
+          driverName: driver?.name,
+          driverEmail: driver?.email,
+          driverPhone: driver?.phone,
+          vehicleId: vehicle?.id,
+          vehiclePlate: vehicle?.plateNumber,
+          projectName: vehicle?.project,
+          uploads,
+        }),
       });
 
       let payload = {};
@@ -442,7 +512,7 @@ export default function DriverDashboard() {
         throw new Error(payload.error || "Failed to save shift details.");
       }
 
-      const shiftIdFromApi = payload.shift?.id || `shift-${Date.now()}`;
+      const shiftIdFromApi = payload.shift?.id || candidateShiftId;
       setActiveShiftId(shiftIdFromApi);
 
       setOnShift(true);
@@ -496,26 +566,33 @@ export default function DriverDashboard() {
     setEndSubmitting(true);
 
     try {
-      const formData = new FormData();
-      formData.append("eventType", "end");
-      formData.append("shiftId", activeShiftId);
-      formData.append("mileage", parsedEnd.toString());
-      formData.append("recordedAt", new Date().toISOString());
-      if (recordedStartMileage !== null) {
-        formData.append("startMileage", recordedStartMileage.toString());
-      }
-      if (driver?.name) formData.append("driverName", driver.name);
-      if (driver?.email) formData.append("driverEmail", driver.email);
-      if (driver?.phone) formData.append("driverPhone", driver.phone);
-      if (vehicle?.id) formData.append("vehicleId", vehicle.id);
-      if (vehicle?.plateNumber) formData.append("vehiclePlate", vehicle.plateNumber);
-      if (vehicle?.project) formData.append("projectName", vehicle.project);
-      formData.append("odometerPhoto", endMileagePhoto);
-      endVehiclePhotos.forEach((file) => formData.append("vehiclePhotos", file));
+      const uploads = await prepareUploadPayload({
+        shiftId: activeShiftId,
+        eventType: "end",
+        odometerPhoto: endMileagePhoto,
+        vehiclePhotos: endVehiclePhotos,
+      });
 
       const response = await fetch("/api/shifts", {
         method: "POST",
-        body: formData,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          eventType: "end",
+          shiftId: activeShiftId,
+          mileage: parsedEnd,
+          recordedAt: new Date().toISOString(),
+          startMileage: recordedStartMileage,
+          driverId: driver?.id,
+          driverName: driver?.name,
+          driverEmail: driver?.email,
+          driverPhone: driver?.phone,
+          vehicleId: vehicle?.id,
+          vehiclePlate: vehicle?.plateNumber,
+          projectName: vehicle?.project,
+          uploads,
+        }),
       });
 
       let payload = {};
@@ -529,13 +606,13 @@ export default function DriverDashboard() {
         throw new Error(payload.error || "Failed to close the shift.");
       }
 
+      setActiveShiftId(null);
       setOnShift(false);
       setShowEndModal(false);
       setEndMileage("");
       setEndMileagePhoto(null);
       setEndVehiclePhotos([]);
       setRecordedStartMileage(null);
-      setActiveShiftId(null);
       setEndError("");
       fetchDriverDashboard({ silent: true });
     } catch (error) {
