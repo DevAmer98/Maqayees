@@ -3,6 +3,7 @@ import path from "path";
 import os from "os";
 import { promises as fs } from "fs";
 import { Client } from "basic-ftp";
+import prisma from "@/lib/prisma";
 
 export const runtime = "nodejs";
 
@@ -10,8 +11,6 @@ const requiredEnvKeys = ["SYNOLOGY_HOST", "SYNOLOGY_PORT", "SYNOLOGY_USER", "SYN
 const hasSynologyConfig = () => requiredEnvKeys.every((key) => !!process.env[key]);
 
 const localUploadRoot = path.join(process.cwd(), "public", "uploads", "shifts");
-const dataDir = path.join(process.cwd(), "data");
-const dataFilePath = path.join(dataDir, "driver-shifts.json");
 
 async function uploadToSynology(localFilePath, remoteFilePath) {
   const client = new Client();
@@ -56,19 +55,6 @@ async function copyToLocalUploads(tempPath, relativePath) {
   return `/uploads/shifts/${relativePath.replace(/\\/g, "/")}`;
 }
 
-async function readShiftRecords() {
-  await fs.mkdir(dataDir, { recursive: true });
-  try {
-    const raw = await fs.readFile(dataFilePath, "utf-8");
-    return JSON.parse(raw);
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      return [];
-    }
-    throw error;
-  }
-}
-
 function sanitizeIdentifier(value, fallbackPrefix = "shift") {
   const trimmed = (value || "").trim();
   const sanitized = trimmed.replace(/[^a-zA-Z0-9_-]/g, "_");
@@ -76,19 +62,38 @@ function sanitizeIdentifier(value, fallbackPrefix = "shift") {
   return `${fallbackPrefix}-${Date.now()}`;
 }
 
-async function persistShiftRecord({ shiftId, eventType, payload, event }) {
-  const records = await readShiftRecords();
-  const now = new Date().toISOString();
-
-  let record = records.find((item) => item.id === shiftId);
-  if (!record) {
-    record = {
-      id: shiftId,
-      createdAt: now,
-      driver: {},
-      vehicle: {},
-    };
+async function loadShiftRecord(shiftId) {
+  const existing = await prisma.driverShift.findUnique({ where: { id: shiftId } });
+  if (!existing?.record) {
+    return null;
   }
+  return JSON.parse(JSON.stringify(existing.record));
+}
+
+function toShiftMetadata(record) {
+  const driverEmail = record.driver?.email ? record.driver.email.toLowerCase() : null;
+  return {
+    driverId: record.driver?.id || null,
+    driverName: record.driver?.name || null,
+    driverEmail,
+    driverPhone: record.driver?.phone || null,
+    vehicleId: record.vehicle?.id || null,
+    vehiclePlate: record.vehicle?.plate || null,
+    projectName: record.vehicle?.project || null,
+    isClosed: Boolean(record.end),
+  };
+}
+
+async function persistShiftRecord({ shiftId, eventType, payload, event }) {
+  const now = new Date().toISOString();
+  const existing = await loadShiftRecord(shiftId);
+
+  const baseRecord = existing || {
+    id: shiftId,
+    createdAt: now,
+    driver: {},
+    vehicle: {},
+  };
 
   const driverDetails = {
     ...(payload.driverId ? { id: payload.driverId } : {}),
@@ -103,14 +108,28 @@ async function persistShiftRecord({ shiftId, eventType, payload, event }) {
     ...(payload.projectName ? { project: payload.projectName } : {}),
   };
 
-  record.driver = { ...record.driver, ...driverDetails };
-  record.vehicle = { ...record.vehicle, ...vehicleDetails };
-  record.updatedAt = now;
-  record[eventType] = event;
+  const record = {
+    ...baseRecord,
+    driver: { ...baseRecord.driver, ...driverDetails },
+    vehicle: { ...baseRecord.vehicle, ...vehicleDetails },
+    updatedAt: now,
+    [eventType]: event,
+  };
 
-  const filtered = records.filter((item) => item.id !== shiftId);
-  const updated = [record, ...filtered];
-  await fs.writeFile(dataFilePath, JSON.stringify(updated, null, 2), "utf-8");
+  const metadata = toShiftMetadata(record);
+
+  await prisma.driverShift.upsert({
+    where: { id: shiftId },
+    create: {
+      id: shiftId,
+      record,
+      ...metadata,
+    },
+    update: {
+      record,
+      ...metadata,
+    },
+  });
 
   return record;
 }

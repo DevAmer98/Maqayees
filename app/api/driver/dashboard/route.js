@@ -1,22 +1,5 @@
 import { NextResponse } from "next/server";
-import path from "path";
-import { promises as fs } from "fs";
-
-const dataDir = path.join(process.cwd(), "data");
-const shiftDataFile = path.join(dataDir, "driver-shifts.json");
-
-async function readShiftRecords() {
-  try {
-    const raw = await fs.readFile(shiftDataFile, "utf-8");
-    return JSON.parse(raw);
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      return [];
-    }
-    console.error("Failed to read shift records", error);
-    return [];
-  }
-}
+import prisma from "@/lib/prisma";
 
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
@@ -65,19 +48,22 @@ export async function GET(req) {
 
   let activeShift = null;
   try {
-    const shiftRecords = await readShiftRecords();
-    const record = shiftRecords.find(
-      (entry) =>
-        entry.driver?.email?.toLowerCase() === driverEmail &&
-        entry.start &&
-        !entry.end
-    );
-    if (record) {
+    const shift = await prisma.driverShift.findFirst({
+      where: {
+        driverEmail,
+        isClosed: false,
+      },
+      orderBy: {
+        updatedAt: "desc",
+      },
+    });
+
+    const record = shift?.record ? JSON.parse(JSON.stringify(shift.record)) : null;
+    if (record?.start && !record?.end) {
       activeShift = {
         id: record.id,
-        startMileage:
-          typeof record.start?.mileage === "number" ? record.start.mileage : null,
-        startedAt: record.start?.recordedAt || record.createdAt,
+        startMileage: typeof record.start.mileage === "number" ? record.start.mileage : null,
+        startedAt: record.start.recordedAt || record.createdAt,
       };
     }
   } catch (error) {

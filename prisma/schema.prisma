@@ -138,3 +138,18 @@ model StoppageLog {
   remarks    String?
   createdAt  DateTime @default(now())
 }
+
+model DriverShift {
+  id           String   @id
+  driverId     String?
+  driverName   String?
+  driverEmail  String?
+  driverPhone  String?
+  vehicleId    String?
+  vehiclePlate String?
+  projectName  String?
+  record       Json
+  isClosed     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
