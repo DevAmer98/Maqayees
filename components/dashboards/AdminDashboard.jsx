@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import AddTruck from "@/components/AddTruck";
+import LogoutButton from "@/components/ui/LogoutButton";
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("monitor");
@@ -180,12 +181,9 @@ export default function AdminDashboard() {
         </nav>
 
         {/* Logout */}
-        <button
-          className="mt-auto bg-gray-800 hover:bg-gray-700 text-white py-2.5 px-4 rounded-lg font-semibold text-sm shadow-md transition"
-          onClick={() => alert("TODO: Implement logout")}
-        >
+        <LogoutButton className="mt-auto bg-gray-800 hover:bg-gray-700 text-white py-2.5 px-4 rounded-lg font-semibold text-sm shadow-md transition disabled:opacity-70">
           Logout
-        </button>
+        </LogoutButton>
       </aside>
 
       {/* Mobile Header */}

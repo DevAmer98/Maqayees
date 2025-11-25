@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSearchParams } from "next/navigation";
+import LogoutButton from "@/components/ui/LogoutButton";
 
 const MAX_VEHICLE_PHOTOS = 4;
 
@@ -622,12 +623,12 @@ export default function DriverDashboard() {
         </nav>
 
         {/* Logout */}
-        <button
-          className="mt-auto bg-gray-800 hover:bg-gray-700 text-white py-2.5 px-4 rounded-lg font-semibold text-sm shadow-md transition"
-          onClick={() => alert("TODO: Implement logout")}
+        <LogoutButton
+          className="mt-auto bg-gray-800 hover:bg-gray-700 text-white py-2.5 px-4 rounded-lg font-semibold text-sm shadow-md transition disabled:opacity-70"
+          pendingText={t[lang].logout}
         >
           {t[lang].logout}
-        </button>
+        </LogoutButton>
       </aside>
 
       {/* Mobile Header */}

@@ -4,6 +4,7 @@
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Area, AreaChart, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import LogoutButton from "@/components/ui/LogoutButton";
 
 export default function ManagerDashboard() {
   const [activeTab, setActiveTab] = useState("overview");
@@ -372,12 +373,9 @@ export default function ManagerDashboard() {
           ))}
         </nav>
 
-        <button
-          className="mt-auto bg-gray-800 hover:bg-gray-700 text-white py-2.5 px-4 rounded-lg font-semibold text-sm shadow-md transition"
-          onClick={() => alert("TODO: Implement logout")}
-        >
+        <LogoutButton className="mt-auto bg-gray-800 hover:bg-gray-700 text-white py-2.5 px-4 rounded-lg font-semibold text-sm shadow-md transition disabled:opacity-70">
           Logout
-        </button>
+        </LogoutButton>
       </aside>
 
       {/* Mobile Header */}
