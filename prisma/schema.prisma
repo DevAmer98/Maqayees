@@ -1,0 +1,140 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/**
+ * ---------- ENUMS ----------
+ */
+enum Role {
+  admin
+  manager
+  project_manager
+  supervisor
+  driver
+  maintenance
+}
+
+/**
+ * ---------- MODELS ----------
+ */
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  phone     String?
+  iqama     String?
+  passport  String?
+  drivingLicensePhoto String?
+  password  String
+  role      Role
+  createdAt DateTime @default(now())
+
+  vehicles           Vehicle[] @relation("UserVehicles")
+  projects           Project[] @relation("UserProjects")
+  supervisedProjects Project[] @relation("ProjectSupervisors")
+}
+
+model Project {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  location    String?
+  startDate   DateTime?
+  endDate     DateTime?
+  manager     User?     @relation("UserProjects", fields: [managerId], references: [id])
+  managerId   String?
+  supervisors User[]    @relation("ProjectSupervisors")
+  vehicles    Vehicle[] @relation("ProjectVehicles")
+  fuelLogs    FuelLog[] // 👈 back-relation added
+  createdAt   DateTime  @default(now())
+}
+
+model Vehicle {
+  id                 String    @id @default(uuid())
+  plateNumber        String
+  brand              String
+  model              String
+  year               Int
+  color              String
+  status             String    @default("Active")
+  registrationExpiry DateTime?
+  insuranceExpiry    DateTime?
+  photo              String? // URL to uploaded image
+  equipmentType      String? // e.g., Compactor, Pickup, Loader
+  tankCapacityLiters Float?
+  purchaseDate       DateTime?
+  initialOdometerKm  Float?
+  fuelType           String?
+  serialNumber       String?
+  chassisNumber      String?
+  projectName        String?
+  driverName         String?
+
+  driver       User?         @relation("UserVehicles", fields: [driverId], references: [id])
+  driverId     String?
+  project      Project?      @relation("ProjectVehicles", fields: [projectId], references: [id])
+  projectId    String?
+  maintenances Maintenance[]
+  fuelLogs     FuelLog[] // 👈 back-relation added
+  stoppageLogs StoppageLog[] // 👈 back-relation added
+  createdAt    DateTime      @default(now())
+}
+
+model Maintenance {
+  id          String    @id @default(uuid())
+  vehicle     Vehicle   @relation(fields: [vehicleId], references: [id])
+  vehicleId   String
+  type        String
+  date        DateTime
+  mileage     Int
+  cost        Float?
+  workshop    String?
+  details     String?
+  nextDueDate DateTime?
+  attachment  String? // URL to image/PDF (S3 or local)
+  createdAt   DateTime  @default(now())
+}
+
+model FuelLog {
+  id        String   @id @default(uuid())
+  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id])
+  vehicleId String
+  project   Project? @relation(fields: [projectId], references: [id])
+  projectId String?
+
+  date               DateTime
+  startKmHr          Float?
+  endKmHr            Float?
+  fuelRefilledLiters Float
+  fuelCost           Float?
+  distanceCoveredKm  Float?
+  efficiencyLtrPerKm Float? // derived
+  operatorName       String?
+  notes              String?
+
+  createdAt DateTime @default(now())
+}
+
+model FuelStandard {
+  id                          String   @id @default(uuid())
+  equipmentType               String
+  standardConsumptionLtrPerHr Float
+  createdAt                   DateTime @default(now())
+}
+
+model StoppageLog {
+  id         String   @id @default(uuid())
+  vehicle    Vehicle  @relation(fields: [vehicleId], references: [id])
+  vehicleId  String
+  date       DateTime
+  reason     String
+  durationHr Float?
+  remarks    String?
+  createdAt  DateTime @default(now())
+}

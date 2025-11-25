@@ -1,0 +1,2 @@
+-- Migration intentionally left blank.
+-- The live database schema is captured in 20240802120000_baseline.
