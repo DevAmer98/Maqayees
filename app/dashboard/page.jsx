@@ -2,12 +2,12 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "../api/auth/[...nextauth]/route";
 import { redirect } from "next/navigation";
 
-import ManagerDashboard from "./(role)/(manager)/page";
-import ProjectManagerDashboard from "./(role)/(pm)/page";
-import SupervisorDashboard from "./(role)/(supervisor)/page";
-import DriverDashboard from "./(role)/(driver)/page";
-import AdminDashboard from "./(role)/(admin)/page";
-import MaintenanceDashboard from "./(role)/(maintenance)/page";
+import ManagerDashboard from "@/components/dashboards/ManagerDashboard";
+import ProjectManagerDashboard from "@/components/dashboards/ProjectManagerDashboard";
+import SupervisorDashboard from "@/components/dashboards/SupervisorDashboard";
+import DriverDashboard from "@/components/dashboards/DriverDashboard";
+import AdminDashboard from "@/components/dashboards/AdminDashboard";
+import MaintenanceDashboard from "@/components/dashboards/MaintenanceDashboard";
 
 export default async function DashboardPage() {
   // Get current session
