@@ -1,7 +1,7 @@
 //app/dashboard/%28role%29/%28maintenance%29/page.jsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 const initialRequests = [
   {
@@ -55,6 +55,65 @@ const createEmptyPart = () => ({
   image: null,
 });
 
+const generateJobCardNumber = () => {
+  const now = new Date();
+  const datePart = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, "0"), String(now.getDate()).padStart(2, "0")].join("-");
+  const timePart = [String(now.getHours()).padStart(2, "0"), String(now.getMinutes()).padStart(2, "0")].join("");
+  return `JC-${datePart}-${timePart}`;
+};
+
+const createJobCardRepairRow = () => ({
+  id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `repair-${Math.random()}`,
+  service: "",
+  repTag: "",
+  qty: "",
+  itemCode: "",
+  unitPrice: "",
+  totalPrice: "",
+});
+
+const parseVehicleLabel = (label) => {
+  if (!label) return { model: "", plate: "" };
+  const parts = label.split("—").map((part) => part.trim());
+  return {
+    model: parts[0] || label,
+    plate: parts[1] || label,
+  };
+};
+
+const buildJobCardDefaults = (request) => {
+  const { model, plate } = parseVehicleLabel(request?.vehicle);
+  return {
+    jobNo: generateJobCardNumber(),
+    plateNo: plate,
+    driverName: request?.driver || "",
+    assetCode: "",
+    project: "",
+    application: "",
+    vehicleType: model,
+    kms: request?.mileage || "",
+    model,
+    dateIn: request?.date || "",
+    dateOut: "",
+    complaint: request?.notes || "",
+    repairType: request?.type || "",
+    mainPower: "",
+    totalAmount: "",
+    preparedBy: "",
+    approvedBy: "",
+  };
+};
+
+const escapeHtml = (value) => {
+  if (!value) return "";
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+};
+
 export default function MaintenanceDashboard() {
   const [lang, setLang] = useState("en");
   const [activeTab, setActiveTab] = useState("requests");
@@ -96,6 +155,9 @@ export default function MaintenanceDashboard() {
         notes: req.notes || "",
       }))
   );
+  const [jobCardInfo, setJobCardInfo] = useState(() => buildJobCardDefaults(null));
+  const [jobCardRepairs, setJobCardRepairs] = useState([createJobCardRepairRow()]);
+  const [jobCardSnapshots, setJobCardSnapshots] = useState({});
 
   useEffect(() => {
     setSelectedRequestId((prev) => {
@@ -164,6 +226,49 @@ export default function MaintenanceDashboard() {
         workshopCard: "Workshop Details",
         approveDisabled: "This request has already been processed.",
         sparePartsHint: "Document any replacement parts or consumables.",
+        pdfWindowBlocked: "Pop-up blocked. Allow pop-ups to download the job card.",
+        jobCardPreviewTitle: "Saved Job Card",
+        jobCardPreviewEmpty: "No job card saved yet. Submit the maintenance update to capture one.",
+        jobCard: {
+          title: "Maintenance Job Card",
+          subtitle: "Complete this form and share it with the workshop team.",
+          instructions: "All fields appear inside the exported PDF.",
+          jobNo: "Job No.",
+          plateNo: "Plate No.",
+          driverName: "Driver",
+          assetCode: "Asset Code",
+          project: "Project",
+          application: "Application",
+          vehicleType: "Vehicle Type",
+          kms: "KMS/HRS",
+          model: "Model",
+          dateIn: "Date, Time IN",
+          dateOut: "Date, Time Out",
+          complaint: "Complaint",
+          repairType: "Type of Repair",
+          mainPower: "Main Power",
+          totalAmount: "Total Amount",
+          preparedBy: "Prepared & Verified by",
+          approvedBy: "Approved by",
+          nameSignature: "Name & Signature",
+          fleetManagerTitle: "Fleet & Logistics Manager",
+          workshopSection: "Workshop Repairs",
+          repairService: "Repair & Service",
+          repTag: "Rep Tag",
+          qty: "Qty",
+          itemCode: "Item Code",
+          unitPrice: "Unit Price",
+          totalPrice: "Total Price",
+          addRepairRow: "Add Repair Line",
+          remove: "Remove",
+          downloadButton: "Download Job Card PDF",
+          resetButton: "Reset Job Card",
+          docNumber: "Doc No. MQAYES/WS/F/02",
+          jobCardHeader: "JOB CARD / نموذج إصلاح",
+          brandLine1: "MQAYES",
+          brandLine2: "شركة مقاييس الدقة",
+          noData: "No data",
+        },
       },
       ar: {
         title: "مركز التحكم بالصيانة",
@@ -222,6 +327,49 @@ export default function MaintenanceDashboard() {
         workshopCard: "تفاصيل الورشة",
         approveDisabled: "تمت معالجة هذا الطلب مسبقاً.",
         sparePartsHint: "قم بتوثيق أي قطع تم استبدالها أو استهلاكها.",
+        pdfWindowBlocked: "تم حظر النافذة المنبثقة. يرجى السماح بتنزيل نموذج الإصلاح.",
+        jobCardPreviewTitle: "أحدث نموذج إصلاح",
+        jobCardPreviewEmpty: "لم يتم حفظ نموذج إصلاح لهذا الطلب بعد. احفظ التحديث لتوليد واحد.",
+        jobCard: {
+          title: "نموذج إصلاح",
+          subtitle: "أكمل التفاصيل التالية وشاركها مع فريق الصيانة.",
+          instructions: "ستظهر جميع الحقول في ملف PDF.",
+          jobNo: "رقم المهمة",
+          plateNo: "رقم اللوحة",
+          driverName: "السائق",
+          assetCode: "كود الأصل",
+          project: "المشروع",
+          application: "تصنيف المركبة",
+          vehicleType: "نوع المركبة",
+          kms: "عداد المسافة / الساعة",
+          model: "الطراز",
+          dateIn: "تاريخ ووقت الدخول",
+          dateOut: "تاريخ ووقت الخروج",
+          complaint: "الشكوى",
+          repairType: "نوع الإصلاح",
+          mainPower: "القوة العاملة",
+          totalAmount: "المبلغ الإجمالي",
+          preparedBy: "تم الإعداد والمراجعة بواسطة",
+          approvedBy: "تمت الموافقة بواسطة",
+          nameSignature: "الاسم والتوقيع",
+          fleetManagerTitle: "مدير الأسطول واللوجستيات",
+          workshopSection: "إصلاحات الورشة",
+          repairService: "الخدمة / الإصلاح",
+          repTag: "الرقم المرجعي",
+          qty: "الكمية",
+          itemCode: "رمز الصنف",
+          unitPrice: "سعر الوحدة",
+          totalPrice: "السعر الإجمالي",
+          addRepairRow: "إضافة بند إصلاح",
+          remove: "حذف",
+          downloadButton: "تنزيل نموذج الإصلاح PDF",
+          resetButton: "إعادة ضبط النموذج",
+          docNumber: "رقم الوثيقة MQAYES/WS/F/02",
+          jobCardHeader: "JOB CARD / نموذج إصلاح",
+          brandLine1: "MQAYES",
+          brandLine2: "شركة مقاييس الدقة",
+          noData: "لا توجد بيانات",
+        },
       },
       ur: {
         title: "مینٹیننس کنٹرول سینٹر",
@@ -280,6 +428,49 @@ export default function MaintenanceDashboard() {
         workshopCard: "ورکشاپ تفصیلات",
         approveDisabled: "یہ درخواست پہلے ہی پروسیس ہو چکی ہے۔",
         sparePartsHint: "استعمال شدہ پارٹس یا کنزیوم ایبلز درج کریں۔",
+        pdfWindowBlocked: "پاپ اپ بلاک ہو گیا۔ براہ کرم جاب کارڈ ڈاؤن لوڈ کرنے کی اجازت دیں۔",
+        jobCardPreviewTitle: "حفوظ شدہ جاب کارڈ",
+        jobCardPreviewEmpty: "اس درخواست کے لیے ابھی تک کوئی جاب کارڈ محفوظ نہیں ہوا۔ اپ ڈیٹ محفوظ کریں تاکہ تیار ہو۔",
+        jobCard: {
+          title: "جاب کارڈ",
+          subtitle: "یہ فارم پُر کریں اور ورکشاپ کے ساتھ شیئر کریں۔",
+          instructions: "تمام معلومات PDF میں شامل ہوں گی۔",
+          jobNo: "جاب نمبر",
+          plateNo: "پلیٹ نمبر",
+          driverName: "ڈرائیور",
+          assetCode: "ایسٹ کوڈ",
+          project: "پروجیکٹ",
+          application: "مکینیکل کیٹیگری",
+          vehicleType: "گاڑی کی قسم",
+          kms: "کلومیٹر / گھنٹے",
+          model: "ماڈل",
+          dateIn: "انٹری کی تاریخ اور وقت",
+          dateOut: "خروج کی تاریخ اور وقت",
+          complaint: "شکایت",
+          repairType: "مرمت کی قسم",
+          mainPower: "مین پاور",
+          totalAmount: "کل رقم",
+          preparedBy: "تیار اور تصدیق کردہ",
+          approvedBy: "منظور کردہ",
+          nameSignature: "نام اور دستخط",
+          fleetManagerTitle: "فلیٹ اور لاجسٹکس منیجر",
+          workshopSection: "ورکشاپ مرمت",
+          repairService: "مرمت / سروس",
+          repTag: "ریپ ٹیگ",
+          qty: "تعداد",
+          itemCode: "آئٹم کوڈ",
+          unitPrice: "یونٹ قیمت",
+          totalPrice: "کل قیمت",
+          addRepairRow: "مرمت آئٹم شامل کریں",
+          remove: "حذف کریں",
+          downloadButton: "جاب کارڈ PDF ڈاؤن لوڈ کریں",
+          resetButton: "جاب کارڈ ری سیٹ کریں",
+          docNumber: "Doc No. MQAYES/WS/F/02",
+          jobCardHeader: "JOB CARD / نموذج إصلاح",
+          brandLine1: "MQAYES",
+          brandLine2: "شركة مقاييس الدقة",
+          noData: "کوئی ڈیٹا نہیں",
+        },
       },
     }),
     []
@@ -299,12 +490,70 @@ export default function MaintenanceDashboard() {
     [strings]
   );
 
+  const formatTypeLabel = useCallback(
+    (value) => {
+      const match = maintenanceTypes.find((option) => option.value === value);
+      return match ? match.label : value || "--";
+    },
+    [maintenanceTypes]
+  );
+
   const selectedRequest = useMemo(
     () => requests.find((req) => req.id === selectedRequestId) || null,
     [requests, selectedRequestId]
   );
 
   const showSpareParts = SPARE_PART_TYPES.has(formData.type);
+
+  const workshopFieldConfigs = [
+    { name: "date", label: strings.date, type: "date", disabled: true },
+    {
+      name: "mileage",
+      label: strings.mileage,
+      type: "number",
+      placeholder: `e.g. 52,300 ${strings.kmUnit}`,
+      disabled: true,
+    },
+    { name: "type", label: strings.type, type: "select", options: maintenanceTypes, disabled: true },
+    {
+      name: "workshop",
+      label: strings.workshop,
+      placeholder: "e.g. Al-Futtaim Service Center",
+    },
+    {
+      name: "cost",
+      label: strings.cost,
+      type: "number",
+      placeholder: "e.g. 450",
+    },
+    { name: "nextDueDate", label: strings.nextDue, type: "date" },
+  ];
+
+  const jobCardMainFields = [
+    { key: "jobNo", label: strings.jobCard.jobNo },
+    { key: "plateNo", label: strings.jobCard.plateNo },
+    { key: "driverName", label: strings.jobCard.driverName },
+    { key: "assetCode", label: strings.jobCard.assetCode },
+    { key: "project", label: strings.jobCard.project },
+    { key: "application", label: strings.jobCard.application },
+    { key: "vehicleType", label: strings.jobCard.vehicleType },
+    { key: "kms", label: strings.jobCard.kms },
+    { key: "model", label: strings.jobCard.model },
+    { key: "dateIn", label: strings.jobCard.dateIn, type: "datetime-local" },
+    { key: "dateOut", label: strings.jobCard.dateOut, type: "datetime-local" },
+    { key: "mainPower", label: strings.jobCard.mainPower },
+    { key: "totalAmount", label: strings.jobCard.totalAmount },
+  ];
+
+  const jobCardTextareaFields = [
+    { key: "complaint", label: strings.jobCard.complaint },
+    { key: "repairType", label: strings.jobCard.repairType },
+  ];
+
+  const jobCardSignatureFields = [
+    { key: "preparedBy", label: strings.jobCard.preparedBy },
+    { key: "approvedBy", label: strings.jobCard.approvedBy },
+  ];
   useEffect(() => {
     if (!selectedRequest) {
       setFormData({
@@ -351,6 +600,26 @@ export default function MaintenanceDashboard() {
     setDecisionNote("");
     setStatusMessage(null);
   }, [selectedRequest]);
+
+  useEffect(() => {
+    if (!selectedRequest) {
+      setJobCardInfo(buildJobCardDefaults(null));
+      setJobCardRepairs([createJobCardRepairRow()]);
+      return;
+    }
+
+    const snapshot = jobCardSnapshots[selectedRequest.id];
+    if (snapshot) {
+      setJobCardInfo({ ...snapshot.info });
+      setJobCardRepairs(snapshot.repairs.map((row) => ({ ...row })));
+      return;
+    }
+
+    const defaults = buildJobCardDefaults(selectedRequest);
+    defaults.repairType = formatTypeLabel(selectedRequest.type);
+    setJobCardInfo(defaults);
+    setJobCardRepairs([createJobCardRepairRow()]);
+  }, [selectedRequest, jobCardSnapshots, formatTypeLabel]);
 
   useEffect(() => {
     setStatusMessage(null);
@@ -412,6 +681,215 @@ export default function MaintenanceDashboard() {
     });
   };
 
+  const handleJobCardInfoChange = (field, value) => {
+    setJobCardInfo((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleJobCardRepairChange = (id, field, value) => {
+    setJobCardRepairs((prev) => prev.map((row) => (row.id === id ? { ...row, [field]: value } : row)));
+  };
+
+  const addJobCardRepairRow = () => {
+    setJobCardRepairs((prev) => [...prev, createJobCardRepairRow()]);
+  };
+
+  const removeJobCardRepairRow = (id) => {
+    setJobCardRepairs((prev) => (prev.length === 1 ? prev : prev.filter((row) => row.id !== id)));
+  };
+
+  const resetJobCard = () => {
+    const defaults = buildJobCardDefaults(selectedRequest);
+    defaults.repairType = selectedRequest ? formatTypeLabel(selectedRequest.type) : "";
+    setJobCardInfo(defaults);
+    setJobCardRepairs([createJobCardRepairRow()]);
+    if (selectedRequest) {
+      setJobCardSnapshots((prev) => {
+        const next = { ...prev };
+        delete next[selectedRequest.id];
+        return next;
+      });
+    }
+  };
+
+  const handleJobCardPdf = () => {
+    if (typeof window === "undefined") return;
+    const popup = window.open("", "jobCardWindow", "width=900,height=1200");
+    if (!popup) {
+      alert(strings.pdfWindowBlocked);
+      return;
+    }
+    popup.opener = null;
+
+    const jc = strings.jobCard;
+    const normalize = (value) => (value === undefined || value === null ? "" : String(value));
+    const safeValue = (value) => {
+      const text = normalize(value);
+      return text.trim() ? escapeHtml(text) : escapeHtml(jc.noData);
+    };
+    const safeMultiline = (value) => {
+      const text = normalize(value);
+      return text.trim() ? escapeHtml(text).replace(/\n/g, "<br/>") : escapeHtml(jc.noData);
+    };
+
+    const infoRows = [
+      [
+        { label: jc.plateNo, value: jobCardInfo.plateNo },
+        { label: jc.driverName, value: jobCardInfo.driverName },
+        { label: jc.application, value: jobCardInfo.application },
+      ],
+      [
+        { label: jc.assetCode, value: jobCardInfo.assetCode },
+        { label: jc.vehicleType, value: jobCardInfo.vehicleType },
+        { label: jc.project, value: jobCardInfo.project },
+      ],
+      [
+        { label: jc.kms, value: jobCardInfo.kms },
+        { label: jc.model, value: jobCardInfo.model },
+        { label: jc.complaint, value: jobCardInfo.complaint },
+      ],
+      [
+        { label: jc.dateIn, value: jobCardInfo.dateIn },
+        { label: jc.dateOut, value: jobCardInfo.dateOut },
+        { label: jc.repairType, value: jobCardInfo.repairType },
+      ],
+    ];
+
+    const infoTableRows = infoRows
+      .map(
+        (row) => `
+          <tr>
+            ${row
+              .map(
+                (cell) => `
+                  <td>
+                    <div class="label">${escapeHtml(cell.label)}</div>
+                    <div class="value">${safeMultiline(cell.value)}</div>
+                  </td>
+                `
+              )
+              .join("")}
+          </tr>
+        `
+      )
+      .join("");
+
+    const populatedRepairs = jobCardRepairs.filter((row) =>
+      [row.service, row.repTag, row.qty, row.itemCode, row.unitPrice, row.totalPrice].some((value) =>
+        value && String(value).trim()
+      )
+    );
+    const repairsTableRows = populatedRepairs.length
+      ? populatedRepairs
+          .map(
+            (row) => `
+              <tr>
+                <td>${safeValue(row.service)}</td>
+                <td>${safeValue(row.repTag)}</td>
+                <td>${safeValue(row.qty)}</td>
+                <td>${safeValue(row.itemCode)}</td>
+                <td>${safeValue(row.unitPrice)}</td>
+                <td>${safeValue(row.totalPrice)}</td>
+              </tr>
+            `
+          )
+          .join("")
+      : `<tr><td colspan="6" class="empty">${escapeHtml(jc.noData)}</td></tr>`;
+
+    const popupHtml = `
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>${escapeHtml(jc.jobCardHeader)}</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 32px; color: #0f172a; }
+            h1 { margin: 8px 0; color: #2563eb; }
+            .brand { display: flex; justify-content: space-between; align-items: center; }
+            .brand h2 { margin: 0; font-size: 20px; letter-spacing: 1px; }
+            .tagline { font-size: 12px; color: #94a3b8; }
+            .doc-number { text-align: right; font-size: 12px; color: #475569; }
+            .job-number { border: 1px solid #cbd5f5; padding: 6px 12px; width: 220px; margin: 12px 0; font-weight: 600; }
+            table { width: 100%; border-collapse: collapse; }
+            table.info td { border: 1px solid #e2e8f0; padding: 8px; vertical-align: top; width: 33%; }
+            table.info .label { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
+            table.info .value { font-size: 13px; margin-top: 4px; }
+            table.repairs th { background: #f8fafc; text-align: left; font-size: 12px; }
+            table.repairs th, table.repairs td { border: 1px solid #e2e8f0; padding: 8px; }
+            table.repairs td.empty { text-align: center; color: #94a3b8; }
+            .notes { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 16px; margin-top: 20px; }
+            .notes div { border: 1px solid #e2e8f0; padding: 12px; min-height: 90px; }
+            .notes strong { display: block; font-size: 13px; color: #0f172a; margin-bottom: 6px; }
+            .summary { display: flex; gap: 24px; margin-top: 24px; font-size: 13px; }
+            .summary span { font-weight: 600; margin-right: 8px; }
+            .signatures { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 24px; margin-top: 32px; }
+            .signature-card { border-top: 2px solid #0f172a; padding-top: 12px; font-size: 13px; }
+            .signature-card .label { font-weight: 600; margin-bottom: 6px; }
+            .signature-line { margin-top: 16px; font-size: 12px; color: #475569; letter-spacing: 0.1em; }
+          </style>
+        </head>
+        <body>
+          <div class="brand">
+            <div>
+              <h2>${escapeHtml(jc.brandLine1)}</h2>
+              <p class="tagline">${escapeHtml(jc.brandLine2)}</p>
+            </div>
+            <div class="doc-number">${escapeHtml(jc.docNumber)}</div>
+          </div>
+          <h1>${escapeHtml(jc.jobCardHeader)}</h1>
+          <div class="job-number">${escapeHtml(jc.jobNo)}: ${safeValue(jobCardInfo.jobNo)}</div>
+          <table class="info">
+            ${infoTableRows}
+          </table>
+          <h3 style="margin-top:24px;">${escapeHtml(jc.workshopSection)}</h3>
+          <table class="repairs">
+            <thead>
+              <tr>
+                <th>${escapeHtml(jc.repairService)}</th>
+                <th>${escapeHtml(jc.repTag)}</th>
+                <th>${escapeHtml(jc.qty)}</th>
+                <th>${escapeHtml(jc.itemCode)}</th>
+                <th>${escapeHtml(jc.unitPrice)}</th>
+                <th>${escapeHtml(jc.totalPrice)}</th>
+              </tr>
+            </thead>
+            <tbody>${repairsTableRows}</tbody>
+          </table>
+          <div class="notes">
+            <div>
+              <strong>${escapeHtml(jc.complaint)}</strong>
+              <p>${safeMultiline(jobCardInfo.complaint)}</p>
+            </div>
+            <div>
+              <strong>${escapeHtml(jc.repairType)}</strong>
+              <p>${safeMultiline(jobCardInfo.repairType)}</p>
+            </div>
+          </div>
+          <div class="summary">
+            <div><span>${escapeHtml(jc.mainPower)}:</span> ${safeValue(jobCardInfo.mainPower)}</div>
+            <div><span>${escapeHtml(jc.totalAmount)}:</span> ${safeValue(jobCardInfo.totalAmount)}</div>
+          </div>
+          <div class="signatures">
+            <div class="signature-card">
+              <div class="label">${escapeHtml(jc.preparedBy)}</div>
+              <div>${safeValue(jobCardInfo.preparedBy)}</div>
+              <div class="signature-line">${escapeHtml(jc.nameSignature)} ____________________</div>
+            </div>
+            <div class="signature-card">
+              <div class="label">${escapeHtml(jc.approvedBy)}</div>
+              <div>${safeValue(jobCardInfo.approvedBy || jc.fleetManagerTitle)}</div>
+              <div class="signature-line">${escapeHtml(jc.nameSignature)} ____________________</div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    popup.document.write(popupHtml);
+    popup.document.close();
+    popup.focus();
+    popup.print();
+  };
+
   const handleMaintenanceSubmit = (event) => {
     event.preventDefault();
     if (!selectedRequest) return;
@@ -429,6 +907,12 @@ export default function MaintenanceDashboard() {
           : req
       )
     );
+
+    const snapshot = {
+      info: { ...jobCardInfo },
+      repairs: jobCardRepairs.map((row) => ({ ...row })),
+    };
+    setJobCardSnapshots((prev) => ({ ...prev, [selectedRequest.id]: snapshot }));
 
     setStatusMessage({ type: "success", text: strings.messageSaved });
   };
@@ -492,11 +976,6 @@ export default function MaintenanceDashboard() {
       text: decision === "approve" ? strings.messageApproved : strings.messageRejected,
     });
     setDecisionNote("");
-  };
-
-  const formatTypeLabel = (value) => {
-    const match = maintenanceTypes.find((option) => option.value === value);
-    return match ? match.label : value || "--";
   };
 
   const renderAttachmentName = (item, index) => {
@@ -659,20 +1138,32 @@ export default function MaintenanceDashboard() {
               {selectedRequest ? (
                 <>
                   <Card title={strings.driverRequestCard}>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-gray-800">
-                      <Field label={strings.driver} value={selectedRequest.driver} />
-                      <Field label={strings.vehicle} value={selectedRequest.vehicle} />
-                      <Field label={strings.date} value={formatDate(selectedRequest.date)} />
-                      <Field label={strings.mileage} value={`${selectedRequest.mileage || "--"} ${strings.kmUnit}`} />
-                      <Field label={strings.type} value={formatTypeLabel(selectedRequest.type)} />
-                      <Field
-                        label={strings.submittedAt}
-                        value={formatDate(selectedRequest.submittedAt, {
-                          dateStyle: "medium",
-                          timeStyle: "short",
-                        })}
-                      />
-                    </div>
+                    {(() => {
+                      const driverInfoFields = [
+                        { label: strings.driver, value: selectedRequest.driver },
+                        { label: strings.vehicle, value: selectedRequest.vehicle },
+                        { label: strings.date, value: formatDate(selectedRequest.date) },
+                        {
+                          label: strings.mileage,
+                          value: `${selectedRequest.mileage || "--"} ${strings.kmUnit}`,
+                        },
+                        { label: strings.type, value: formatTypeLabel(selectedRequest.type) },
+                        {
+                          label: strings.submittedAt,
+                          value: formatDate(selectedRequest.submittedAt, {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          }),
+                        },
+                      ];
+                      return (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-gray-800">
+                          {driverInfoFields.map(({ label, value }) => (
+                            <Field key={label} label={label} value={value} />
+                          ))}
+                        </div>
+                      );
+                    })()}
                     <div className="mt-4">
                       <h3 className="text-sm font-semibold text-black mb-1">{strings.notes}</h3>
                       <p className="text-sm text-gray-600">
@@ -698,57 +1189,26 @@ export default function MaintenanceDashboard() {
                     </div>
                   </Card>
 
-                  <Card title={strings.workshopCard}>
-                    <form onSubmit={handleMaintenanceSubmit} className="space-y-6">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <FormField
-                          label={strings.date}
-                          name="date"
-                          type="date"
-                          formData={formData}
-                          handleChange={handleChange}
-                          disabled
-                        />
-                        <FormField
-                          label={strings.mileage}
-                          name="mileage"
-                          type="number"
-                          placeholder={`e.g. 52,300 ${strings.kmUnit}`}
-                          formData={formData}
-                          handleChange={handleChange}
-                          disabled
-                        />
-                        <FormField
-                          label={strings.type}
-                          name="type"
-                          type="select"
-                          options={maintenanceTypes}
-                          formData={formData}
-                          handleChange={handleChange}
-                          disabled
-                        />
-                        <FormField
-                          label={strings.workshop}
-                          name="workshop"
-                          placeholder="e.g. Al-Futtaim Service Center"
-                          formData={formData}
-                          handleChange={handleChange}
-                        />
-                        <FormField
-                          label={strings.cost}
-                          name="cost"
-                          type="number"
-                          placeholder="e.g. 450"
-                          formData={formData}
-                          handleChange={handleChange}
-                        />
-                        <FormField
-                          label={strings.nextDue}
-                          name="nextDueDate"
-                          type="date"
-                          formData={formData}
-                          handleChange={handleChange}
-                        />
+                  <Card title={`${strings.workshopCard} & ${strings.jobCard.title}`}>
+                    <form onSubmit={handleMaintenanceSubmit} className="space-y-10">
+                      <section className="space-y-6">
+                        <h3 className="text-base font-semibold text-black border-b border-gray-100 pb-2">
+                          {strings.workshopCard}
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {workshopFieldConfigs.map((field) => (
+                            <FormField
+                              key={field.name}
+                              label={field.label}
+                            name={field.name}
+                            type={field.type || "text"}
+                            placeholder={field.placeholder}
+                            options={field.options}
+                            formData={formData}
+                            handleChange={handleChange}
+                            disabled={field.disabled}
+                          />
+                        ))}
                       </div>
 
                       <div>
@@ -881,8 +1341,163 @@ export default function MaintenanceDashboard() {
                           className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:outline-none"
                         />
                       </div>
+                      </section>
+
+                      <section className="space-y-6">
+                        <div>
+                          <h3 className="text-base font-semibold text-black border-b border-gray-100 pb-2">
+                            {strings.jobCard.title}
+                          </h3>
+                          <p className="text-sm text-gray-600 mb-1">{strings.jobCard.subtitle}</p>
+                          <p className="text-xs text-gray-500 mb-4">{strings.jobCard.instructions}</p>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            {jobCardMainFields.map((field) => (
+                              <JobCardInput
+                                key={field.key}
+                                label={field.label}
+                                type={field.type || "text"}
+                                value={jobCardInfo[field.key] || ""}
+                                onChange={(value) => handleJobCardInfoChange(field.key, value)}
+                              />
+                            ))}
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                            {jobCardTextareaFields.map((field) => (
+                              <JobCardTextarea
+                                key={field.key}
+                                label={field.label}
+                                value={jobCardInfo[field.key] || ""}
+                                onChange={(value) => handleJobCardInfoChange(field.key, value)}
+                              />
+                            ))}
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                            {jobCardSignatureFields.map((field) => (
+                              <JobCardInput
+                                key={field.key}
+                                label={field.label}
+                                value={jobCardInfo[field.key] || ""}
+                                onChange={(value) => handleJobCardInfoChange(field.key, value)}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="text-base font-semibold text-black">{strings.jobCard.workshopSection}</h4>
+                            <button
+                              type="button"
+                              onClick={addJobCardRepairRow}
+                              className="text-sm font-semibold text-black px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-100"
+                            >
+                              + {strings.jobCard.addRepairRow}
+                            </button>
+                          </div>
+                          <div className="overflow-x-auto rounded-xl border border-gray-200">
+                            <table className="w-full text-sm">
+                              <thead className="bg-gray-50 text-gray-700">
+                                <tr>
+                                  <th className="px-3 py-2 text-left">{strings.jobCard.repairService}</th>
+                                  <th className="px-3 py-2 text-left">{strings.jobCard.repTag}</th>
+                                  <th className="px-3 py-2 text-left">{strings.jobCard.qty}</th>
+                                  <th className="px-3 py-2 text-left">{strings.jobCard.itemCode}</th>
+                                  <th className="px-3 py-2 text-left">{strings.jobCard.unitPrice}</th>
+                                  <th className="px-3 py-2 text-left">{strings.jobCard.totalPrice}</th>
+                                  <th className="px-3 py-2"></th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {jobCardRepairs.map((row) => (
+                                  <tr key={row.id} className="border-t">
+                                    <td className="px-3 py-2">
+                                      <input
+                                        type="text"
+                                        value={row.service}
+                                        onChange={(event) => handleJobCardRepairChange(row.id, "service", event.target.value)}
+                                        className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                                      />
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <input
+                                        type="text"
+                                        value={row.repTag}
+                                        onChange={(event) => handleJobCardRepairChange(row.id, "repTag", event.target.value)}
+                                        className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                                      />
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <input
+                                        type="text"
+                                        value={row.qty}
+                                        onChange={(event) => handleJobCardRepairChange(row.id, "qty", event.target.value)}
+                                        className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                                      />
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <input
+                                        type="text"
+                                        value={row.itemCode}
+                                        onChange={(event) => handleJobCardRepairChange(row.id, "itemCode", event.target.value)}
+                                        className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                                      />
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <input
+                                        type="text"
+                                        value={row.unitPrice}
+                                        onChange={(event) => handleJobCardRepairChange(row.id, "unitPrice", event.target.value)}
+                                        className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                                      />
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <input
+                                        type="text"
+                                        value={row.totalPrice}
+                                        onChange={(event) => handleJobCardRepairChange(row.id, "totalPrice", event.target.value)}
+                                        className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                                      />
+                                    </td>
+                                    <td className="px-3 py-2 text-right">
+                                      {jobCardRepairs.length > 1 && (
+                                        <button
+                                          type="button"
+                                          onClick={() => removeJobCardRepairRow(row.id)}
+                                          className="text-xs text-red-600 hover:text-red-800"
+                                        >
+                                          {strings.jobCard.remove}
+                                        </button>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-3">
+                          <button
+                            type="button"
+                            onClick={handleJobCardPdf}
+                            className="bg-black hover:bg-gray-900 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow"
+                          >
+                            {strings.jobCard.downloadButton}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={resetJobCard}
+                            className="border border-gray-300 hover-border-gray-500 text-gray-700 px-4 py-2.5 rounded-lg text-sm"
+                          >
+                            {strings.jobCard.resetButton}
+                          </button>
+                        </div>
+                      </section>
                     </form>
                   </Card>
+
+                  <Card title={strings.jobCardPreviewTitle}>
+                    <JobCardPreview snapshot={selectedRequest ? jobCardSnapshots[selectedRequest.id] : null} strings={strings} />
+                  </Card>
+
                 </>
               ) : (
                 <Card title={strings.workshopCard}>
@@ -1086,6 +1701,122 @@ function SparePartRow({ part, strings, isRTL, onChange, onImageChange, onRemove 
         >
           {strings.removePart}
         </button>
+      </div>
+    </div>
+  );
+}
+
+function JobCardInput({ label, type = "text", value, onChange }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-800 mb-1">{label}</label>
+      <input
+        type={type}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black"
+      />
+    </div>
+  );
+}
+
+function JobCardTextarea({ label, value, onChange }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-800 mb-1">{label}</label>
+      <textarea
+        rows={4}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black"
+      />
+    </div>
+  );
+}
+
+function JobCardPreview({ snapshot, strings }) {
+  if (!snapshot) {
+    return <p className="text-sm text-gray-500">{strings.jobCardPreviewEmpty}</p>;
+  }
+
+  const { info, repairs } = snapshot;
+  const infoGrid = [
+    { label: strings.jobCard.jobNo, value: info.jobNo },
+    { label: strings.jobCard.plateNo, value: info.plateNo },
+    { label: strings.jobCard.driverName, value: info.driverName },
+    { label: strings.jobCard.kms, value: info.kms },
+    { label: strings.jobCard.vehicleType, value: info.vehicleType },
+    { label: strings.jobCard.model, value: info.model },
+    { label: strings.jobCard.dateIn, value: info.dateIn },
+    { label: strings.jobCard.dateOut, value: info.dateOut },
+    { label: strings.jobCard.workshopSection, value: info.project || "—" },
+  ];
+
+  const signatureFields = [
+    { label: strings.jobCard.preparedBy, value: info.preparedBy },
+    { label: strings.jobCard.approvedBy, value: info.approvedBy || strings.jobCard.fleetManagerTitle },
+  ];
+
+  const activeRepairs = repairs.filter((row) =>
+    [row.service, row.repTag, row.qty, row.itemCode, row.unitPrice, row.totalPrice].some((value) => value && String(value).trim())
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-800">
+        {infoGrid.map(({ label, value }) => (
+          <div key={label} className="border border-gray-200 rounded-xl p-3 bg-gray-50">
+            <p className="text-xs uppercase text-gray-500 tracking-wide">{label}</p>
+            <p className="font-semibold text-black mt-1">{value || strings.jobCard.noData}</p>
+          </div>
+        ))}
+      </div>
+
+      <div>
+        <h4 className="text-sm font-semibold text-black mb-2">{strings.jobCard.workshopSection}</h4>
+        <div className="overflow-x-auto border border-gray-200 rounded-xl">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-gray-600">
+              <tr>
+                <th className="px-3 py-2 text-left">{strings.jobCard.repairService}</th>
+                <th className="px-3 py-2 text-left">{strings.jobCard.repTag}</th>
+                <th className="px-3 py-2 text-left">{strings.jobCard.qty}</th>
+                <th className="px-3 py-2 text-left">{strings.jobCard.itemCode}</th>
+                <th className="px-3 py-2 text-left">{strings.jobCard.unitPrice}</th>
+                <th className="px-3 py-2 text-left">{strings.jobCard.totalPrice}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {activeRepairs.length ? (
+                activeRepairs.map((row) => (
+                  <tr key={row.id} className="border-t">
+                    <td className="px-3 py-2">{row.service || strings.jobCard.noData}</td>
+                    <td className="px-3 py-2">{row.repTag || strings.jobCard.noData}</td>
+                    <td className="px-3 py-2">{row.qty || strings.jobCard.noData}</td>
+                    <td className="px-3 py-2">{row.itemCode || strings.jobCard.noData}</td>
+                    <td className="px-3 py-2">{row.unitPrice || strings.jobCard.noData}</td>
+                    <td className="px-3 py-2">{row.totalPrice || strings.jobCard.noData}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td className="px-3 py-4 text-center text-gray-500" colSpan={6}>
+                    {strings.jobCard.noData}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {signatureFields.map(({ label, value }) => (
+          <div key={label} className="border border-gray-200 rounded-xl p-4">
+            <p className="text-xs uppercase text-gray-500 tracking-wide">{label}</p>
+            <p className="font-semibold text-black mt-2">{value || strings.jobCard.noData}</p>
+          </div>
+        ))}
       </div>
     </div>
   );

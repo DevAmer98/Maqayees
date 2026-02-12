@@ -42,6 +42,187 @@ async function uploadShiftAsset({ file, shiftId, eventType, label }) {
   };
 }
 
+const WALKAROUND_ITEMS = {
+  before: [
+    {
+      id: "before-1",
+      number: 1,
+      label: "Check Engine & Hyd. Oil level",
+      secondary: "آئل اور ہائیڈرولک آئل کی سطح چیک کریں",
+      icon: "🛢️",
+    },
+    {
+      id: "before-2",
+      number: 2,
+      label: "Check Coolant level",
+      secondary: "کولنٹ کی سطح چیک کریں",
+      icon: "🥶",
+    },
+    {
+      id: "before-3",
+      number: 3,
+      label: "Check AdBlue level",
+      secondary: "ایڈ بلو کی سطح چیک کریں",
+      icon: "💧",
+    },
+    {
+      id: "before-4",
+      number: 4,
+      label: "Check for missing tanks caps",
+      secondary: "ٹینک کے ڈھکن چیک کریں",
+      icon: "🧰",
+    },
+    {
+      id: "before-5",
+      number: 5,
+      label: "Check for any leak",
+      secondary: "کسی بھی لیک کے لیے چیک کریں",
+      icon: "⚠️",
+    },
+    {
+      id: "before-6",
+      number: 6,
+      label: "Check all the lights",
+      secondary: "تمام لائٹس چیک کریں",
+      icon: "💡",
+    },
+    {
+      id: "before-7",
+      number: 7,
+      label: "Check vehicle structure & suspension cracks & loose bolts",
+      secondary: "گاڑی کی ساخت اور سسپنشن میں دراڑیں اور ڈھیلے بولٹ چیک کریں",
+      icon: "🛠️",
+    },
+    {
+      id: "before-8",
+      number: 8,
+      label: "Check for loose wiring",
+      secondary: "ڈھیلی وائرنگ چیک کریں",
+      icon: "🔌",
+    },
+    {
+      id: "before-9",
+      number: 9,
+      label: "Check all the tires & bolts",
+      secondary: "تمام ٹائروں اور بولٹ کو چیک کریں",
+      icon: "🛞",
+    },
+  ],
+  after: [
+    {
+      id: "after-10",
+      number: 10,
+      label: "Check the fuel level",
+      secondary: "ایندھن کی سطح چیک کریں",
+      icon: "⛽",
+    },
+    {
+      id: "after-11",
+      number: 11,
+      label: "Check the dashboard warning lights",
+      secondary: "ڈیش بورڈ وارننگ لائٹس چیک کریں",
+      icon: "⚙️",
+    },
+    {
+      id: "after-12",
+      number: 12,
+      label: "Check the mirror, wiper, and windshield glass",
+      secondary: "شیشہ، وائپر اور ونڈ اسکرین چیک کریں",
+      icon: "🪞",
+    },
+    {
+      id: "after-13",
+      number: 13,
+      label: "Check the seat belt function",
+      secondary: "سیٹ بیلٹ کی فعالیت چیک کریں",
+      icon: "🪢",
+    },
+    {
+      id: "after-14",
+      number: 14,
+      label: "Check the horn",
+      secondary: "ہارن چیک کریں",
+      icon: "📣",
+    },
+    {
+      id: "after-15",
+      number: 15,
+      label: "Check the air brake pressure",
+      secondary: "ایئر بریک پریشر چیک کریں",
+      icon: "🌀",
+    },
+    {
+      id: "after-16",
+      number: 16,
+      label: "Test the brake performance",
+      secondary: "بریک کی کارکردگی چیک کریں",
+      icon: "🛑",
+    },
+    {
+      id: "after-17",
+      number: 17,
+      label: "Test the steering performance",
+      secondary: "اسٹیئرنگ کی کارکردگی چیک کریں",
+      icon: "🛞",
+    },
+    {
+      id: "after-18",
+      number: 18,
+      label: "Check for excessive exhaust smoke",
+      secondary: "ایگزاسٹ کے دھوئیں کو چیک کریں",
+      icon: "🌫️",
+    },
+    {
+      id: "after-19",
+      number: 19,
+      label: "Check the availability of the first-aid kit & fire extinguisher",
+      secondary: "فرسٹ ایڈ اور فائر بجھانے کا آلہ چیک کریں",
+      icon: "🧯",
+    },
+  ],
+};
+
+const ALL_WALKAROUND_ITEMS = [...WALKAROUND_ITEMS.before, ...WALKAROUND_ITEMS.after];
+const TOTAL_WALKAROUND_ITEMS = ALL_WALKAROUND_ITEMS.length;
+
+const buildWalkaroundState = () => {
+  const initial = {};
+  ALL_WALKAROUND_ITEMS.forEach((item) => {
+    initial[item.id] = false;
+  });
+  return initial;
+};
+
+const CHECKLIST_INFO_TEMPLATE = {
+  driverId: "",
+  driverName: "",
+  plateNo: "",
+  startDateTime: "",
+  endDateTime: "",
+  startKm: "",
+  endKm: "",
+  shift: "",
+  preTripDefects: "",
+  postTripDefects: "",
+  dispatcher: "",
+  driverSignature: "",
+};
+
+const escapeHtml = (value) => {
+  if (!value) return "";
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+};
+
+const formatChecklistDateTime = (value) => {
+  if (!value) return "—";
+  return value.replace("T", " ");
+};
+
 export default function DriverDashboard() {
   const [onShift, setOnShift] = useState(false);
   const [lang, setLang] = useState("en");
@@ -66,6 +247,8 @@ export default function DriverDashboard() {
   const [maintenanceRecords, setMaintenanceRecords] = useState([]);
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [dashboardError, setDashboardError] = useState("");
+  const [walkaroundChecks, setWalkaroundChecks] = useState(() => buildWalkaroundState());
+  const [checklistInfo, setChecklistInfo] = useState(() => ({ ...CHECKLIST_INFO_TEMPLATE }));
 
   const searchParams = useSearchParams();
   const defaultTab = searchParams.get("tab") || "vehicle";
@@ -110,6 +293,33 @@ export default function DriverDashboard() {
       system: "Maqayees System",
       profileInfo: "Profile Information",
       assignedVehicle: "Assigned Vehicle",
+      checklistTitle: "Daily Vehicle Walkaround Checklist",
+      checklistSubtitle: "Tick every inspection item before heading out.",
+      checklistInfoHint: "Details provided here appear on the exported PDF.",
+      inspectionItemLabel: "Inspection Item",
+      statusLabel: "Status",
+      beforeEngineStartLabel: "Before Engine Start",
+      afterEngineStartLabel: "After Engine Start",
+      driverIdLabel: "Driver ID",
+      driverNameLabel: "Driver Name",
+      plateNoLabel: "Plate No.",
+      startDateLabel: "Start Date & Time",
+      endDateLabel: "End Date & Time",
+      startKmLabel: "Start KM",
+      endKmLabel: "End KM",
+      shiftLabel: "Shift",
+      dayShift: "Day Shift",
+      nightShift: "Night Shift",
+      preTripDefects: "Pre-Trip Observed Defects",
+      postTripDefects: "Post-Trip Observed Defects",
+      dispatcherSignature: "Project Dispatcher",
+      driverSignatureLabel: "Driver Signature",
+      checklistProgress: "Checklist progress",
+      completeChecklistMessage: "All checks completed. Download the PDF below.",
+      incompleteChecklistMessage: "Complete every check to unlock the PDF.",
+      downloadChecklist: "Download Checklist PDF",
+      resetChecklist: "Reset Checklist",
+      pdfWindowBlocked: "Pop-up blocked. Allow pop-ups to download the checklist.",
       maintenanceHistory: "Maintenance History",
       welcome: "Welcome",
       onDuty: "🟢 On Duty",
@@ -119,8 +329,7 @@ export default function DriverDashboard() {
       mileage: "Mileage",
       type: "Maintenance Type",
       selectType: "Select type",
-      oilChange: "Oil Change",
-      preventiveMaintenance: "Preventive Maintenance",
+      preventiveMaintenance: "PPM",
       inspection: "General Inspection",
       repair: "Repair",
       noRecords: "No maintenance records found.",
@@ -171,6 +380,33 @@ export default function DriverDashboard() {
       system: "نظام مقاييس",
       profileInfo: "معلومات الملف الشخصي",
       assignedVehicle: "المركبة المخصصة",
+      checklistTitle: "قائمة التفقد اليومي للمركبة",
+      checklistSubtitle: "قم بتحديد كل عنصر فحص قبل التحرك.",
+      checklistInfoHint: "سيتم إظهار هذه البيانات في ملف PDF المُصدَّر.",
+      inspectionItemLabel: "عنصر الفحص",
+      statusLabel: "الحالة",
+      beforeEngineStartLabel: "قبل تشغيل المحرك",
+      afterEngineStartLabel: "بعد تشغيل المحرك",
+      driverIdLabel: "رقم السائق",
+      driverNameLabel: "اسم السائق",
+      plateNoLabel: "رقم اللوحة",
+      startDateLabel: "تاريخ ووقت البداية",
+      endDateLabel: "تاريخ ووقت النهاية",
+      startKmLabel: "قراءة البداية",
+      endKmLabel: "قراءة النهاية",
+      shiftLabel: "الوردية",
+      dayShift: "وردية نهارية",
+      nightShift: "وردية ليلية",
+      preTripDefects: "ملاحظات قبل الرحلة",
+      postTripDefects: "ملاحظات بعد الرحلة",
+      dispatcherSignature: "مشرف المشروع",
+      driverSignatureLabel: "توقيع السائق",
+      checklistProgress: "تقدم قائمة الفحص",
+      completeChecklistMessage: "تم إكمال جميع الفحوصات. يمكنك تنزيل ملف PDF بالأسفل.",
+      incompleteChecklistMessage: "أكمل جميع العناصر لعرض زر التنزيل.",
+      downloadChecklist: "تنزيل قائمة الفحص PDF",
+      resetChecklist: "إعادة ضبط القائمة",
+      pdfWindowBlocked: "تم حظر النافذة المنبثقة. يرجى السماح بتنزيل PDF.",
       maintenanceHistory: "سجل الصيانة",
       welcome: "مرحبًا",
       onDuty: "🟢 في الخدمة",
@@ -180,8 +416,7 @@ export default function DriverDashboard() {
       mileage: "قراءة العداد",
       type: "نوع الصيانة",
       selectType: "اختر النوع",
-      oilChange: "تغيير الزيت",
-      preventiveMaintenance: "صيانة وقائية",
+      preventiveMaintenance: "PPM",
       inspection: "فحص عام",
       repair: "إصلاح",
       noRecords: "لا توجد سجلات صيانة.",
@@ -232,6 +467,33 @@ export default function DriverDashboard() {
       system: "مقییس سسٹم",
       profileInfo: "پروفائل معلومات",
       assignedVehicle: "تفویض شدہ گاڑی",
+      checklistTitle: "روزانہ گاڑی واک اراؤنڈ چیک لسٹ",
+      checklistSubtitle: "روانگی سے پہلے ہر آئٹم پر نشان لگائیں۔",
+      checklistInfoHint: "یہ معلومات PDF میں ظاہر ہو گی۔",
+      inspectionItemLabel: "معائنہ آئٹم",
+      statusLabel: "حالت",
+      beforeEngineStartLabel: "انجن اسٹارٹ سے پہلے",
+      afterEngineStartLabel: "انجن اسٹارٹ کے بعد",
+      driverIdLabel: "ڈرائیور آئی ڈی",
+      driverNameLabel: "ڈرائیور کا نام",
+      plateNoLabel: "پلیٹ نمبر",
+      startDateLabel: "شروع ہونے کی تاریخ اور وقت",
+      endDateLabel: "اختتام کی تاریخ اور وقت",
+      startKmLabel: "ابتدائی کلو میٹر",
+      endKmLabel: "اختتامی کلو میٹر",
+      shiftLabel: "شفٹ",
+      dayShift: "دن کی شفٹ",
+      nightShift: "رات کی شفٹ",
+      preTripDefects: "سفر سے پہلے کی خرابیوں",
+      postTripDefects: "سفر کے بعد کی خرابیوں",
+      dispatcherSignature: "پروجیکٹ ڈسپیچر",
+      driverSignatureLabel: "ڈرائیور دستخط",
+      checklistProgress: "چیک لسٹ کی پیش رفت",
+      completeChecklistMessage: "تمام چیک مکمل ہو گئے۔ نیچے PDF ڈاؤن لوڈ کریں۔",
+      incompleteChecklistMessage: "PDF کے لیے تمام آئٹمز مکمل کریں۔",
+      downloadChecklist: "چیک لسٹ PDF ڈاؤن لوڈ کریں",
+      resetChecklist: "چیک لسٹ صاف کریں",
+      pdfWindowBlocked: "پاپ اپ بلاک ہو گیا۔ براہ کرم PDF ڈاؤن لوڈ کرنے کی اجازت دیں۔",
       maintenanceHistory: "مینٹیننس کی ہسٹری",
       welcome: "خوش آمدید",
       onDuty: "🟢 ڈیوٹی پر",
@@ -241,8 +503,7 @@ export default function DriverDashboard() {
       mileage: "مائلیج",
       type: "مینٹیننس کی قسم",
       selectType: "قسم منتخب کریں",
-      oilChange: "آئل چینج",
-      preventiveMaintenance: "پریوینٹو مینٹیننس",
+      preventiveMaintenance: "PPM",
       inspection: "جنرل انسپیکشن",
       repair: "مرمت",
       noRecords: "کوئی مینٹیننس ریکارڈ نہیں ملا۔",
@@ -327,9 +588,25 @@ export default function DriverDashboard() {
     fetchDriverDashboard();
   }, [fetchDriverDashboard]);
 
+  useEffect(() => {
+    if (!driver) return;
+    setChecklistInfo((prev) => ({
+      ...prev,
+      driverId: prev.driverId || driver.id || "",
+      driverName: prev.driverName || driver.name || "",
+    }));
+  }, [driver]);
+
+  useEffect(() => {
+    if (!vehicle) return;
+    setChecklistInfo((prev) => ({
+      ...prev,
+      plateNo: prev.plateNo || vehicle.plateNumber || "",
+    }));
+  }, [vehicle]);
+
   const maintenanceTypes = useMemo(
     () => [
-      { value: "oil_change", label: t[lang].oilChange },
       { value: "preventive_maintenance", label: t[lang].preventiveMaintenance },
       { value: "repair", label: t[lang].repair },
     ],
@@ -343,6 +620,9 @@ export default function DriverDashboard() {
 
   ];
 
+  const completedChecklistItems = useMemo(() => Object.values(walkaroundChecks).filter(Boolean).length, [walkaroundChecks]);
+  const checklistReadyForPdf = completedChecklistItems === TOTAL_WALKAROUND_ITEMS;
+
   const toggleShift = () => {
     if (dashboardLoading) return;
     if (!onShift) {
@@ -354,6 +634,160 @@ export default function DriverDashboard() {
 
   const handleChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleChecklistInfoChange = (field, value) => {
+    setChecklistInfo((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleChecklistToggle = (itemId) => {
+    setWalkaroundChecks((prev) => ({ ...prev, [itemId]: !prev[itemId] }));
+  };
+
+  const resetChecklist = () => {
+    setWalkaroundChecks(buildWalkaroundState());
+    setChecklistInfo({
+      ...CHECKLIST_INFO_TEMPLATE,
+      driverId: driver?.id || "",
+      driverName: driver?.name || "",
+      plateNo: vehicle?.plateNumber || "",
+    });
+  };
+
+  const handleChecklistPdf = () => {
+    if (!checklistReadyForPdf) return;
+    if (typeof window === "undefined") return;
+
+    const popup = window.open("", "driverChecklistWindow", "width=900,height=1200");
+    if (!popup) {
+      alert(t[lang].pdfWindowBlocked);
+      return;
+    }
+    popup.opener = null;
+
+    const shiftLabel =
+      checklistInfo.shift === "day"
+        ? t[lang].dayShift
+        : checklistInfo.shift === "night"
+        ? t[lang].nightShift
+        : "—";
+
+    const infoRows = [
+      { label: t[lang].driverIdLabel, value: checklistInfo.driverId || "—" },
+      { label: t[lang].driverNameLabel, value: checklistInfo.driverName || "—" },
+      { label: t[lang].plateNoLabel, value: checklistInfo.plateNo || vehicle?.plateNumber || "—" },
+      { label: t[lang].shiftLabel, value: shiftLabel },
+      { label: t[lang].startDateLabel, value: formatChecklistDateTime(checklistInfo.startDateTime) },
+      { label: t[lang].endDateLabel, value: formatChecklistDateTime(checklistInfo.endDateTime) },
+      { label: t[lang].startKmLabel, value: checklistInfo.startKm || "—" },
+      { label: t[lang].endKmLabel, value: checklistInfo.endKm || "—" },
+    ];
+
+    const infoTableRows = infoRows
+      .map(
+        (row) => `
+          <tr>
+            <td>${escapeHtml(row.label)}</td>
+            <td>${escapeHtml(row.value)}</td>
+          </tr>
+        `
+      )
+      .join("");
+
+    const buildSection = (title, items) => `
+      <h3>${escapeHtml(title)}</h3>
+      <table class="items">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>${escapeHtml(t[lang].inspectionItemLabel)}</th>
+            <th>${escapeHtml(t[lang].statusLabel)}</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items
+            .map(
+              (item) => `
+                <tr>
+                  <td>${item.number}</td>
+                  <td>
+                    <div>${escapeHtml(item.label)}</div>
+                    ${item.secondary ? `<div class="secondary">${escapeHtml(item.secondary)}</div>` : ""}
+                  </td>
+                  <td class="status">${walkaroundChecks[item.id] ? "☑" : "☐"}</td>
+                </tr>
+              `
+            )
+            .join("")}
+        </tbody>
+      </table>
+    `;
+
+    const preTrip = escapeHtml(checklistInfo.preTripDefects || "—");
+    const postTrip = escapeHtml(checklistInfo.postTripDefects || "—");
+    const dispatcher = escapeHtml(checklistInfo.dispatcher || "—");
+    const driverSignature = escapeHtml(checklistInfo.driverSignature || "—");
+
+    const generatedAt = escapeHtml(new Date().toLocaleString());
+
+    popup.document.write(`
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>${escapeHtml(t[lang].checklistTitle)}</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 32px; color: #111; }
+            h1 { font-size: 24px; margin-bottom: 4px; }
+            h2 { font-size: 18px; margin: 24px 0 8px; }
+            h3 { font-size: 16px; margin: 20px 0 8px; }
+            table { width: 100%; border-collapse: collapse; }
+            table.meta tr td:first-child { width: 35%; font-weight: 600; }
+            table.meta td { border: 1px solid #e5e7eb; padding: 6px 10px; font-size: 13px; }
+            table.items th { text-align: left; background: #f3f4f6; font-size: 12px; }
+            table.items th, table.items td { border: 1px solid #e5e7eb; padding: 6px 8px; }
+            table.items td.status { text-align: center; font-size: 18px; }
+            table.items td div.secondary { font-size: 11px; color: #6b7280; margin-top: 4px; }
+            .notes { display: grid; grid-template-columns: repeat(auto-fit,minmax(240px,1fr)); gap: 16px; margin-top: 24px; }
+            .note { border: 1px solid #e5e7eb; padding: 12px; min-height: 120px; }
+            .signatures { display: grid; grid-template-columns: repeat(auto-fit,minmax(200px,1fr)); gap: 16px; margin-top: 24px; }
+            .signature { border-top: 1px solid #111; padding-top: 8px; font-size: 13px; }
+            .footer { margin-top: 32px; font-size: 12px; color: #6b7280; }
+          </style>
+        </head>
+        <body>
+          <h1>${escapeHtml(t[lang].checklistTitle)}</h1>
+          <p>${escapeHtml(t[lang].checklistSubtitle)}</p>
+          <table class="meta">${infoTableRows}</table>
+          ${buildSection(t[lang].beforeEngineStartLabel, WALKAROUND_ITEMS.before)}
+          ${buildSection(t[lang].afterEngineStartLabel, WALKAROUND_ITEMS.after)}
+          <div class="notes">
+            <div class="note">
+              <strong>${escapeHtml(t[lang].preTripDefects)}</strong>
+              <p>${preTrip || "—"}</p>
+            </div>
+            <div class="note">
+              <strong>${escapeHtml(t[lang].postTripDefects)}</strong>
+              <p>${postTrip || "—"}</p>
+            </div>
+          </div>
+          <div class="signatures">
+            <div class="signature">
+              ${escapeHtml(t[lang].dispatcherSignature)}<br/>
+              ${dispatcher}
+            </div>
+            <div class="signature">
+              ${escapeHtml(t[lang].driverSignatureLabel)}<br/>
+              ${driverSignature}
+            </div>
+          </div>
+          <p class="footer">Generated: ${generatedAt}</p>
+        </body>
+      </html>
+    `);
+    popup.document.close();
+    popup.focus();
+    popup.print();
   };
 
   const handleMaintenanceSubmit = (event) => {
@@ -806,105 +1240,223 @@ export default function DriverDashboard() {
           )}
 
           {activeTab === "vehicle" && (
-            <Card title={t[lang].assignedVehicle}>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm text-gray-800">
-                <Field label={t[lang].plate} value={vehicle?.plateNumber || "—"} />
-                <Field label={t[lang].brand} value={vehicle?.brand || "—"} />
-                <Field label={t[lang].model} value={vehicle?.model || "—"} />
-                <Field label={t[lang].year} value={vehicle?.year || "—"} />
-                <Field label={t[lang].color} value={vehicle?.color || "—"} />
-                <Field label={t[lang].project} value={vehicle?.project || "—"} />
-                <p>
-                  <span className="font-medium">{t[lang].status}:</span>{" "}
-                  <span className="bg-gray-200 text-gray-800 px-2 py-1 rounded-full text-xs font-medium">
-                    {vehicle?.status || t[lang].offDuty}
-                  </span>
-                </p>
-              </div>
-            </Card>
-          )
-          
-          
-          }
+            <>
+              <Card title={t[lang].assignedVehicle}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm text-gray-800">
+                  <Field label={t[lang].plate} value={vehicle?.plateNumber || "—"} />
+                  <Field label={t[lang].brand} value={vehicle?.brand || "—"} />
+                  <Field label={t[lang].model} value={vehicle?.model || "—"} />
+                  <Field label={t[lang].year} value={vehicle?.year || "—"} />
+                  <Field label={t[lang].color} value={vehicle?.color || "—"} />
+                  <Field label={t[lang].project} value={vehicle?.project || "—"} />
+                  <p>
+                    <span className="font-medium">{t[lang].status}:</span>{" "}
+                    <span className="bg-gray-200 text-gray-800 px-2 py-1 rounded-full text-xs font-medium">
+                      {vehicle?.status || t[lang].offDuty}
+                    </span>
+                  </p>
+                </div>
+              </Card>
+
+              {onShift && (
+                <Card title={t[lang].checklistTitle}>
+                  <p className="text-sm text-gray-600 mb-2">{t[lang].checklistSubtitle}</p>
+                  <p className="text-xs text-gray-500 mb-4">{t[lang].checklistInfoHint}</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 text-sm">
+                    <ChecklistInput
+                      label={t[lang].driverIdLabel}
+                      value={checklistInfo.driverId}
+                      onChange={(value) => handleChecklistInfoChange("driverId", value)}
+                    />
+                    <ChecklistInput
+                      label={t[lang].driverNameLabel}
+                      value={checklistInfo.driverName}
+                      onChange={(value) => handleChecklistInfoChange("driverName", value)}
+                    />
+                    <ChecklistInput
+                      label={t[lang].plateNoLabel}
+                      value={checklistInfo.plateNo}
+                      onChange={(value) => handleChecklistInfoChange("plateNo", value)}
+                    />
+                    <ChecklistInput
+                      label={t[lang].startKmLabel}
+                      type="number"
+                      value={checklistInfo.startKm}
+                      onChange={(value) => handleChecklistInfoChange("startKm", value)}
+                    />
+                    <ChecklistInput
+                      label={t[lang].endKmLabel}
+                      type="number"
+                      value={checklistInfo.endKm}
+                      onChange={(value) => handleChecklistInfoChange("endKm", value)}
+                    />
+                    <div>
+                      <label className="block text-sm font-medium text-gray-800 mb-1">{t[lang].shiftLabel}</label>
+                      <div className="flex items-center gap-4 text-sm text-gray-700">
+                        <label className="inline-flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            className="h-4 w-4 text-black focus:ring-black"
+                            checked={checklistInfo.shift === "day"}
+                            onChange={() => handleChecklistInfoChange("shift", "day")}
+                          />
+                          {t[lang].dayShift}
+                        </label>
+                        <label className="inline-flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            className="h-4 w-4 text-black focus:ring-black"
+                            checked={checklistInfo.shift === "night"}
+                            onChange={() => handleChecklistInfoChange("shift", "night")}
+                          />
+                          {t[lang].nightShift}
+                        </label>
+                      </div>
+                    </div>
+                    <ChecklistInput
+                      label={t[lang].startDateLabel}
+                      type="datetime-local"
+                      value={checklistInfo.startDateTime}
+                      onChange={(value) => handleChecklistInfoChange("startDateTime", value)}
+                    />
+                    <ChecklistInput
+                      label={t[lang].endDateLabel}
+                      type="datetime-local"
+                      value={checklistInfo.endDateTime}
+                      onChange={(value) => handleChecklistInfoChange("endDateTime", value)}
+                    />
+                  </div>
+
+                  <ChecklistSection
+                    title={t[lang].beforeEngineStartLabel}
+                    items={WALKAROUND_ITEMS.before}
+                    checks={walkaroundChecks}
+                    onToggle={handleChecklistToggle}
+                  />
+                  <ChecklistSection
+                    title={t[lang].afterEngineStartLabel}
+                    items={WALKAROUND_ITEMS.after}
+                    checks={walkaroundChecks}
+                    onToggle={handleChecklistToggle}
+                  />
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                    <ChecklistTextarea
+                      label={t[lang].preTripDefects}
+                      value={checklistInfo.preTripDefects}
+                      onChange={(value) => handleChecklistInfoChange("preTripDefects", value)}
+                    />
+                    <ChecklistTextarea
+                      label={t[lang].postTripDefects}
+                      value={checklistInfo.postTripDefects}
+                      onChange={(value) => handleChecklistInfoChange("postTripDefects", value)}
+                    />
+                  </div>
+
+                  <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sm text-gray-700">
+                      {t[lang].checklistProgress}: {completedChecklistItems}/{TOTAL_WALKAROUND_ITEMS}
+                    </p>
+                    <p className={`text-sm ${checklistReadyForPdf ? "text-green-600" : "text-gray-500"}`}>
+                      {checklistReadyForPdf ? t[lang].completeChecklistMessage : t[lang].incompleteChecklistMessage}
+                    </p>
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    {checklistReadyForPdf && (
+                      <button
+                        onClick={handleChecklistPdf}
+                        className="bg-black hover:bg-gray-900 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow"
+                      >
+                        {t[lang].downloadChecklist}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={resetChecklist}
+                      className="border border-gray-300 hover:border-gray-500 text-gray-700 px-4 py-2.5 rounded-lg text-sm"
+                    >
+                      {t[lang].resetChecklist}
+                    </button>
+                  </div>
+                </Card>
+              )}
+            </>
+          )}
 
           {activeTab === "maintenance" && (
-            <Card title={t[lang].recordMaintenance}>
-              <form
-                onSubmit={handleMaintenanceSubmit}
-                className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4"
-              >
-                <FormField
-                  label={t[lang].date}
-                  name="date"
-                  type="date"
-                  formData={formData}
-                  handleChange={handleChange}
-                />
-                <FormField
-                  label={t[lang].mileage}
-                  name="mileage"
-                  type="number"
-                  placeholder="e.g. 52,300"
-                  formData={formData}
-                  handleChange={handleChange}
-                />
-                <FormField
-                  label={t[lang].type}
-                  name="type"
-                  type="select"
-                  options={maintenanceTypes}
-                  placeholder={t[lang].selectType}
-                  formData={formData}
-                  handleChange={handleChange}
-                />
-                <div className="sm:col-span-3 flex justify-end">
-                  <button
-                    type="submit"
-                    className="bg-black hover:bg-gray-900 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-md transition"
-                  >
-                    {t[lang].submit}
-                  </button>
-                </div>
-              </form>
-              {maintenanceMessage && (
-                <p
-                  className={`mb-4 text-sm ${
-                    maintenanceMessage.type === "success" ? "text-green-600" : "text-red-600"
-                  }`}
-                >
-                  {maintenanceMessage.text}
-                </p>
-              )}
-              <h3 className="text-base font-semibold text-black mb-3">{t[lang].maintenanceHistory}</h3>
-              {maintenanceRecords.length ? (
-                <table className="w-full text-sm text-left text-gray-800 border border-gray-300 rounded-lg overflow-hidden">
-                  <thead className="bg-gray-100 text-gray-800">
-                    <tr>
-                      <th className="py-3 px-4 font-medium">Date</th>
-                      <th className="py-3 px-4 font-medium">Type</th>
-                      <th className="py-3 px-4 font-medium">Mileage</th>
-                      <th className="py-3 px-4 font-medium">Workshop</th>
-                      <th className="py-3 px-4 font-medium">Cost (SAR)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {maintenanceRecords.map((r) => (
-                      <tr key={r.id} className="border-b hover:bg-gray-50 transition">
-                        <td className="py-2.5 px-4">{r.date}</td>
-                        <td className="py-2.5 px-4">
-                          {r.typeLabel || maintenanceTypes.find((option) => option.value === r.typeKey)?.label || r.typeKey}
-                        </td>
-                        <td className="py-2.5 px-4">{r.mileage}</td>
-                        <td className="py-2.5 px-4">{r.workshop}</td>
-                        <td className="py-2.5 px-4">{r.cost}</td>
+            <>
+              <Card title={t[lang].recordMaintenance}>
+                <form onSubmit={handleMaintenanceSubmit} className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+                  <FormField
+                    label={t[lang].date}
+                    name="date"
+                    type="date"
+                    formData={formData}
+                    handleChange={handleChange}
+                  />
+                  <FormField
+                    label={t[lang].mileage}
+                    name="mileage"
+                    type="number"
+                    placeholder="e.g. 52,300"
+                    formData={formData}
+                    handleChange={handleChange}
+                  />
+                  <FormField
+                    label={t[lang].type}
+                    name="type"
+                    type="select"
+                    options={maintenanceTypes}
+                    placeholder={t[lang].selectType}
+                    formData={formData}
+                    handleChange={handleChange}
+                  />
+                  <div className="sm:col-span-3 flex justify-end">
+                    <button
+                      type="submit"
+                      className="bg-black hover:bg-gray-900 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-md transition"
+                    >
+                      {t[lang].submit}
+                    </button>
+                  </div>
+                </form>
+                {maintenanceMessage && (
+                  <p className={`mb-4 text-sm ${maintenanceMessage.type === "success" ? "text-green-600" : "text-red-600"}`}>
+                    {maintenanceMessage.text}
+                  </p>
+                )}
+                <h3 className="text-base font-semibold text-black mb-3">{t[lang].maintenanceHistory}</h3>
+                {maintenanceRecords.length ? (
+                  <table className="w-full text-sm text-left text-gray-800 border border-gray-300 rounded-lg overflow-hidden">
+                    <thead className="bg-gray-100 text-gray-800">
+                      <tr>
+                        <th className="py-3 px-4 font-medium">Date</th>
+                        <th className="py-3 px-4 font-medium">Type</th>
+                        <th className="py-3 px-4 font-medium">Mileage</th>
+                        <th className="py-3 px-4 font-medium">Workshop</th>
+                        <th className="py-3 px-4 font-medium">Cost (SAR)</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <p className="text-gray-500 text-sm">{t[lang].noRecords}</p>
-              )}
-            </Card>
+                    </thead>
+                    <tbody>
+                      {maintenanceRecords.map((r) => (
+                        <tr key={r.id} className="border-b hover:bg-gray-50 transition">
+                          <td className="py-2.5 px-4">{r.date}</td>
+                          <td className="py-2.5 px-4">
+                            {r.typeLabel || maintenanceTypes.find((option) => option.value === r.typeKey)?.label || r.typeKey}
+                          </td>
+                          <td className="py-2.5 px-4">{r.mileage}</td>
+                          <td className="py-2.5 px-4">{r.workshop}</td>
+                          <td className="py-2.5 px-4">{r.cost}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <p className="text-gray-500 text-sm">{t[lang].noRecords}</p>
+                )}
+              </Card>
+
+            </>
           )}
         </div>
       </main>
@@ -1174,5 +1726,67 @@ function FormField({ label, name, type = "text", placeholder, options = [], form
         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black"
       />
     </div>
+  );
+}
+
+function ChecklistInput({ label, type = "text", value, onChange }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-800 mb-1">{label}</label>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black"
+      />
+    </div>
+  );
+}
+
+function ChecklistTextarea({ label, value, onChange }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-800 mb-1">{label}</label>
+      <textarea
+        rows={4}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black"
+      />
+    </div>
+  );
+}
+
+function ChecklistSection({ title, items, checks, onToggle }) {
+  return (
+    <section className="mt-6">
+      <div className="flex items-center justify-between gap-4">
+        <h3 className="text-base font-semibold text-black">{title}</h3>
+        <span className="text-xs text-gray-500">{items.length} items</span>
+      </div>
+      <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+        {items.map((item) => (
+          <label
+            key={item.id}
+            className="flex items-start gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3 hover:border-gray-400 transition"
+          >
+            <input
+              type="checkbox"
+              checked={Boolean(checks[item.id])}
+              onChange={() => onToggle(item.id)}
+              className="mt-1 h-4 w-4 rounded border-gray-400 text-black focus:ring-black"
+            />
+            <div className="text-sm text-gray-800">
+              <p className="font-medium text-black flex items-center gap-1">
+                <span className="text-gray-500">{item.number}.</span>
+                {item.icon && <span>{item.icon}</span>}
+                <span>{item.label}</span>
+              </p>
+              {item.secondary && <p className="text-xs text-gray-600 mt-1">{item.secondary}</p>}
+            </div>
+          </label>
+        ))}
+      </div>
+    </section>
   );
 }
