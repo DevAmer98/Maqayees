@@ -1252,8 +1252,12 @@ export default function DriverDashboard() {
                 </div>
               </Card>
 
-              {onShift && (
-                <Card title={t[lang].checklistTitle}>
+              <Card title={t[lang].checklistTitle}>
+                {!onShift && (
+                  <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    Start your shift to complete and submit the daily checklist.
+                  </p>
+                )}
                   <p className="text-sm text-gray-600 mb-2">{t[lang].checklistSubtitle}</p>
                   <p className="text-xs text-gray-500 mb-4">{t[lang].checklistInfoHint}</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 text-sm">
@@ -1373,7 +1377,6 @@ export default function DriverDashboard() {
                     </button>
                   </div>
                 </Card>
-              )}
             </>
           )}
 
