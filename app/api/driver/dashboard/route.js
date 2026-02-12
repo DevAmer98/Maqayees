@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
 import prisma from "@/lib/prisma";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
-  const driverEmail = (searchParams.get("driverEmail") || "driver@maqayees.com").toLowerCase();
+  const session = await getServerSession(authOptions);
+  const sessionEmail = session?.user?.email ? String(session.user.email).toLowerCase() : "";
+  const queryEmail = (searchParams.get("driverEmail") || "").toLowerCase();
+  const driverEmail = queryEmail || sessionEmail || "driver@maqayees.com";
 
   const driver = {
     id: "drv-001",
