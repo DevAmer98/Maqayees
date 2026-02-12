@@ -6,13 +6,17 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
   const session = await getServerSession(authOptions);
+  const sessionUserId = session?.user?.id ? String(session.user.id) : "";
+  const sessionUserName = session?.user?.name ? String(session.user.name) : "";
   const sessionEmail = session?.user?.email ? String(session.user.email).toLowerCase() : "";
   const queryEmail = (searchParams.get("driverEmail") || "").toLowerCase();
-  const driverEmail = queryEmail || sessionEmail || "driver@maqayees.com";
+  const driverEmail = sessionEmail || queryEmail || "driver@maqayees.com";
+  const driverId = sessionUserId || "drv-001";
+  const driverName = sessionUserName || "Ahmed Driver";
 
   const driver = {
-    id: "drv-001",
-    name: "Ahmed Driver",
+    id: driverId,
+    name: driverName,
     email: driverEmail,
     phone: "0551234567",
     iqama: "2456789231",
@@ -53,20 +57,31 @@ export async function GET(req) {
 
   let activeShift = null;
   try {
+    const shiftWhere = {
+      isClosed: false,
+      OR: [],
+    };
+    if (driverEmail) {
+      shiftWhere.OR.push({ driverEmail });
+    }
+    if (queryEmail && queryEmail !== driverEmail) {
+      shiftWhere.OR.push({ driverEmail: queryEmail });
+    }
+    if (sessionUserId) {
+      shiftWhere.OR.push({ driverId: sessionUserId });
+    }
+
     const shift = await prisma.driverShift.findFirst({
-      where: {
-        driverEmail,
-        isClosed: false,
-      },
+      where: shiftWhere,
       orderBy: {
         updatedAt: "desc",
       },
     });
 
     const record = shift?.record ? JSON.parse(JSON.stringify(shift.record)) : null;
-    if (record?.start && !record?.end) {
+    if (shift && !shift.isClosed && record?.start) {
       activeShift = {
-        id: record.id,
+        id: shift.id,
         startMileage: typeof record.start.mileage === "number" ? record.start.mileage : null,
         startedAt: record.start.recordedAt || record.createdAt,
       };

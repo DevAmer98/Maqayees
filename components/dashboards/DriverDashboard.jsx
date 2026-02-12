@@ -3,7 +3,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useSearchParams } from "next/navigation";
 import { upload } from "@vercel/blob/client";
 import LogoutButton from "@/components/ui/LogoutButton";
 
@@ -250,9 +249,7 @@ export default function DriverDashboard() {
   const [walkaroundChecks, setWalkaroundChecks] = useState(() => buildWalkaroundState());
   const [checklistInfo, setChecklistInfo] = useState(() => ({ ...CHECKLIST_INFO_TEMPLATE }));
 
-  const searchParams = useSearchParams();
-  const defaultTab = searchParams.get("tab") || "vehicle";
-  const driverEmailParam = searchParams.get("driverEmail");
+  const defaultTab = "vehicle";
   const [activeTab, setActiveTab] = useState(defaultTab);
   const isRTL = lang === "ar" || lang === "ur";
 
@@ -552,10 +549,7 @@ export default function DriverDashboard() {
       if (!silent) setDashboardLoading(true);
       setDashboardError("");
       try {
-        const params = new URLSearchParams();
-        if (driverEmailParam) params.set("driverEmail", driverEmailParam);
-        const endpoint = params.size ? `/api/driver/dashboard?${params.toString()}` : "/api/driver/dashboard";
-        const response = await fetch(endpoint, { cache: "no-store" });
+        const response = await fetch("/api/driver/dashboard", { cache: "no-store" });
         const payload = await response.json();
         if (!response.ok || !payload.success) {
           throw new Error(payload.error || "Failed to load driver dashboard.");
@@ -581,7 +575,7 @@ export default function DriverDashboard() {
         if (!silent) setDashboardLoading(false);
       }
     },
-    [driverEmailParam]
+    []
   );
 
   useEffect(() => {
