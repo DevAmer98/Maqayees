@@ -72,6 +72,33 @@ const createJobCardRepairRow = () => ({
   totalPrice: "",
 });
 
+const mapSparePartsToJobCardRepairs = (parts) => {
+  const populated = (parts || []).filter((part) =>
+    [part?.name, part?.quantity, part?.cost].some((value) => value && String(value).trim())
+  );
+
+  if (!populated.length) return [createJobCardRepairRow()];
+
+  return populated.map((part) => {
+    const qtyText = String(part.quantity || "").trim();
+    const costText = String(part.cost || "").trim();
+    const qtyNum = Number(qtyText);
+    const costNum = Number(costText);
+    const hasNumbers = Number.isFinite(qtyNum) && Number.isFinite(costNum) && qtyText !== "" && costText !== "";
+    const total = hasNumbers ? String(qtyNum * costNum) : "";
+
+    return {
+      id: part.id || (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `repair-${Math.random()}`),
+      service: part.name || "",
+      repTag: "",
+      qty: qtyText,
+      itemCode: "",
+      unitPrice: costText,
+      totalPrice: total,
+    };
+  });
+};
+
 const parseVehicleLabel = (label) => {
   if (!label) return { model: "", plate: "" };
   const parts = label.split("—").map((part) => part.trim());
@@ -554,6 +581,20 @@ export default function MaintenanceDashboard() {
     { key: "preparedBy", label: strings.jobCard.preparedBy },
     { key: "approvedBy", label: strings.jobCard.approvedBy },
   ];
+
+  const workshopDuplicateJobCardKeys = new Set(["kms", "dateIn", "repairType"]);
+  const visibleJobCardMainFields = jobCardMainFields.filter(
+    (field) => !workshopDuplicateJobCardKeys.has(field.key)
+  );
+  const visibleJobCardTextareaFields = jobCardTextareaFields.filter(
+    (field) => !workshopDuplicateJobCardKeys.has(field.key)
+  );
+
+  useEffect(() => {
+    if (!showSpareParts) return;
+    setJobCardRepairs(mapSparePartsToJobCardRepairs(spareParts));
+  }, [showSpareParts, spareParts]);
+
   useEffect(() => {
     if (!selectedRequest) {
       setFormData({
@@ -1351,7 +1392,7 @@ export default function MaintenanceDashboard() {
                           <p className="text-sm text-gray-600 mb-1">{strings.jobCard.subtitle}</p>
                           <p className="text-xs text-gray-500 mb-4">{strings.jobCard.instructions}</p>
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                            {jobCardMainFields.map((field) => (
+                            {visibleJobCardMainFields.map((field) => (
                               <JobCardInput
                                 key={field.key}
                                 label={field.label}
@@ -1362,7 +1403,7 @@ export default function MaintenanceDashboard() {
                             ))}
                           </div>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-                            {jobCardTextareaFields.map((field) => (
+                            {visibleJobCardTextareaFields.map((field) => (
                               <JobCardTextarea
                                 key={field.key}
                                 label={field.label}
@@ -1385,13 +1426,15 @@ export default function MaintenanceDashboard() {
                         <div>
                           <div className="flex items-center justify-between mb-2">
                             <h4 className="text-base font-semibold text-black">{strings.jobCard.workshopSection}</h4>
-                            <button
-                              type="button"
-                              onClick={addJobCardRepairRow}
-                              className="text-sm font-semibold text-black px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-100"
-                            >
-                              + {strings.jobCard.addRepairRow}
-                            </button>
+                            {!showSpareParts && (
+                              <button
+                                type="button"
+                                onClick={addJobCardRepairRow}
+                                className="text-sm font-semibold text-black px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-100"
+                              >
+                                + {strings.jobCard.addRepairRow}
+                              </button>
+                            )}
                           </div>
                           <div className="overflow-x-auto rounded-xl border border-gray-200">
                             <table className="w-full text-sm">
@@ -1410,55 +1453,79 @@ export default function MaintenanceDashboard() {
                                 {jobCardRepairs.map((row) => (
                                   <tr key={row.id} className="border-t">
                                     <td className="px-3 py-2">
-                                      <input
-                                        type="text"
-                                        value={row.service}
-                                        onChange={(event) => handleJobCardRepairChange(row.id, "service", event.target.value)}
-                                        className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
-                                      />
+                                      {showSpareParts ? (
+                                        <span>{row.service || strings.jobCard.noData}</span>
+                                      ) : (
+                                        <input
+                                          type="text"
+                                          value={row.service}
+                                          onChange={(event) => handleJobCardRepairChange(row.id, "service", event.target.value)}
+                                          className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                                        />
+                                      )}
                                     </td>
                                     <td className="px-3 py-2">
-                                      <input
-                                        type="text"
-                                        value={row.repTag}
-                                        onChange={(event) => handleJobCardRepairChange(row.id, "repTag", event.target.value)}
-                                        className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
-                                      />
+                                      {showSpareParts ? (
+                                        <span>{row.repTag || strings.jobCard.noData}</span>
+                                      ) : (
+                                        <input
+                                          type="text"
+                                          value={row.repTag}
+                                          onChange={(event) => handleJobCardRepairChange(row.id, "repTag", event.target.value)}
+                                          className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                                        />
+                                      )}
                                     </td>
                                     <td className="px-3 py-2">
-                                      <input
-                                        type="text"
-                                        value={row.qty}
-                                        onChange={(event) => handleJobCardRepairChange(row.id, "qty", event.target.value)}
-                                        className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
-                                      />
+                                      {showSpareParts ? (
+                                        <span>{row.qty || strings.jobCard.noData}</span>
+                                      ) : (
+                                        <input
+                                          type="text"
+                                          value={row.qty}
+                                          onChange={(event) => handleJobCardRepairChange(row.id, "qty", event.target.value)}
+                                          className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                                        />
+                                      )}
                                     </td>
                                     <td className="px-3 py-2">
-                                      <input
-                                        type="text"
-                                        value={row.itemCode}
-                                        onChange={(event) => handleJobCardRepairChange(row.id, "itemCode", event.target.value)}
-                                        className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
-                                      />
+                                      {showSpareParts ? (
+                                        <span>{row.itemCode || strings.jobCard.noData}</span>
+                                      ) : (
+                                        <input
+                                          type="text"
+                                          value={row.itemCode}
+                                          onChange={(event) => handleJobCardRepairChange(row.id, "itemCode", event.target.value)}
+                                          className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                                        />
+                                      )}
                                     </td>
                                     <td className="px-3 py-2">
-                                      <input
-                                        type="text"
-                                        value={row.unitPrice}
-                                        onChange={(event) => handleJobCardRepairChange(row.id, "unitPrice", event.target.value)}
-                                        className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
-                                      />
+                                      {showSpareParts ? (
+                                        <span>{row.unitPrice || strings.jobCard.noData}</span>
+                                      ) : (
+                                        <input
+                                          type="text"
+                                          value={row.unitPrice}
+                                          onChange={(event) => handleJobCardRepairChange(row.id, "unitPrice", event.target.value)}
+                                          className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                                        />
+                                      )}
                                     </td>
                                     <td className="px-3 py-2">
-                                      <input
-                                        type="text"
-                                        value={row.totalPrice}
-                                        onChange={(event) => handleJobCardRepairChange(row.id, "totalPrice", event.target.value)}
-                                        className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
-                                      />
+                                      {showSpareParts ? (
+                                        <span>{row.totalPrice || strings.jobCard.noData}</span>
+                                      ) : (
+                                        <input
+                                          type="text"
+                                          value={row.totalPrice}
+                                          onChange={(event) => handleJobCardRepairChange(row.id, "totalPrice", event.target.value)}
+                                          className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                                        />
+                                      )}
                                     </td>
                                     <td className="px-3 py-2 text-right">
-                                      {jobCardRepairs.length > 1 && (
+                                      {!showSpareParts && jobCardRepairs.length > 1 && (
                                         <button
                                           type="button"
                                           onClick={() => removeJobCardRepairRow(row.id)}

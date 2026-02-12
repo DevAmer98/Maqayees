@@ -65,86 +65,17 @@ export default function MaintenancePage() {
 
       {/* Main content */}
       <main className="flex-1 p-4 sm:p-6 md:p-8">
-        {/* Table view (desktop) */}
-        <div className="hidden md:block overflow-x-auto">
-          <table className="min-w-full border border-gray-200 rounded-lg overflow-hidden shadow-sm bg-white">
-            <thead className="bg-gray-100 text-gray-700">
-              <tr>
-                <th className="px-4 py-3 text-left text-sm font-medium">Date</th>
-                <th className="px-4 py-3 text-left text-sm font-medium">Mileage</th>
-                <th className="px-4 py-3 text-left text-sm font-medium">Type</th>
-                <th className="px-4 py-3 text-left text-sm font-medium">Workshop</th>
-                <th className="px-4 py-3 text-left text-sm font-medium">Details</th>
-                <th className="px-4 py-3 text-left text-sm font-medium">Cost (SAR)</th>
-                <th className="px-4 py-3 text-left text-sm font-medium">Next Due</th>
-                <th className="px-4 py-3 text-left text-sm font-medium">Status</th>
-                <th className="px-4 py-3 text-left text-sm font-medium">Attachment</th>
-                <th className="px-4 py-3 text-right text-sm font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {records.map((rec) => (
-                <tr
-                  key={rec.id}
-                  className="border-t hover:bg-gray-50 transition-colors"
-                >
-                  <td className="px-4 py-3">{rec.date}</td>
-                  <td className="px-4 py-3">{rec.mileage.toLocaleString()}</td>
-                  <td className="px-4 py-3">{rec.type}</td>
-                  <td className="px-4 py-3">{rec.workshop}</td>
-                  <td className="px-4 py-3 text-gray-600 truncate max-w-xs">
-                    {rec.details}
-                  </td>
-                  <td className="px-4 py-3">{rec.cost}</td>
-                  <td className="px-4 py-3">{rec.nextDueDate}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        rec.status === "Completed"
-                          ? "bg-green-100 text-green-700"
-                          : "bg-yellow-100 text-yellow-700"
-                      }`}
-                    >
-                      {rec.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    {rec.attachment ? (
-                      <a
-                        href={rec.attachment}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:underline text-sm"
-                      >
-                        View
-                      </a>
-                    ) : (
-                      <span className="text-gray-400 text-sm">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right space-x-3">
-                    <button className="text-blue-600 hover:underline text-sm">
-                      Edit
-                    </button>
-                    <button className="text-red-600 hover:underline text-sm">
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Card view (mobile) */}
-        <div className="grid gap-4 md:hidden">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {records.map((rec) => (
             <div
               key={rec.id}
-              className="border rounded-lg p-4 bg-white shadow-sm flex flex-col space-y-3"
+              className="border rounded-lg p-4 bg-white shadow-sm flex flex-col space-y-4"
             >
-              <div className="flex justify-between">
-                <h2 className="font-semibold text-gray-800">{rec.type}</h2>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="font-semibold text-gray-800">{rec.type}</h2>
+                  <p className="text-xs text-gray-500">Record #{rec.id}</p>
+                </div>
                 <span
                   className={`px-2 py-1 rounded-full text-xs font-medium ${
                     rec.status === "Completed"
@@ -156,34 +87,54 @@ export default function MaintenancePage() {
                 </span>
               </div>
 
-              <p className="text-sm text-gray-600">
-                <strong>Date:</strong> {rec.date}
-              </p>
-              <p className="text-sm text-gray-600">
-                <strong>Mileage:</strong> {rec.mileage.toLocaleString()} km
-              </p>
-              <p className="text-sm text-gray-600">
-                <strong>Workshop:</strong> {rec.workshop}
-              </p>
-              <p className="text-sm text-gray-600">
-                <strong>Cost:</strong> {rec.cost} SAR
-              </p>
-              <p className="text-sm text-gray-600">
-                <strong>Next Due:</strong> {rec.nextDueDate}
-              </p>
-              <p className="text-sm text-gray-600">
-                <strong>Details:</strong> {rec.details}
-              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-gray-600">
+                <p>
+                  <strong>Date:</strong> {rec.date}
+                </p>
+                <p>
+                  <strong>Mileage:</strong> {rec.mileage.toLocaleString()} km
+                </p>
+                <p>
+                  <strong>Workshop:</strong> {rec.workshop}
+                </p>
+                <p>
+                  <strong>Cost:</strong> {rec.cost} SAR
+                </p>
+                <p className="sm:col-span-2">
+                  <strong>Next Due:</strong> {rec.nextDueDate}
+                </p>
+                <p className="sm:col-span-2">
+                  <strong>Details:</strong> {rec.details}
+                </p>
+              </div>
 
-              {rec.attachment && (
-                <img
-                  src={rec.attachment}
-                  alt="Maintenance"
-                  className="w-full h-40 object-cover rounded-lg border"
-                />
-              )}
+              <div className="space-y-2">
+                <p className="text-sm text-gray-600">
+                  <strong>Attachment:</strong>{" "}
+                  {rec.attachment ? (
+                    <a
+                      href={rec.attachment}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline"
+                    >
+                      View file
+                    </a>
+                  ) : (
+                    <span className="text-gray-400">—</span>
+                  )}
+                </p>
 
-              <div className="flex justify-end space-x-3 pt-2">
+                {rec.attachment && (
+                  <img
+                    src={rec.attachment}
+                    alt="Maintenance"
+                    className="w-full h-40 object-cover rounded-lg border"
+                  />
+                )}
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-1">
                 <button className="text-blue-600 text-sm hover:underline">
                   Edit
                 </button>
