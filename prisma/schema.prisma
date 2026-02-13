@@ -38,6 +38,7 @@ model User {
   vehicles           Vehicle[] @relation("UserVehicles")
   projects           Project[] @relation("UserProjects")
   supervisedProjects Project[] @relation("ProjectSupervisors")
+  checklists         DriverChecklist[]
 }
 
 model Project {
@@ -152,4 +153,26 @@ model DriverShift {
   isClosed     Boolean  @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+model MaintenanceJobCardSnapshot {
+  id          String   @id @default(uuid())
+  requestId   String   @unique
+  info        Json
+  repairs     Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model DriverChecklist {
+  id           String   @id
+  driverId     String
+  driver       User     @relation(fields: [driverId], references: [id])
+  vehiclePlate String?
+  shiftId      String?
+  record       Json
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([driverId, updatedAt])
 }

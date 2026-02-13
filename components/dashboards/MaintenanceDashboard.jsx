@@ -164,24 +164,10 @@ export default function MaintenanceDashboard() {
   const [mileagePhoto, setMileagePhoto] = useState(null);
   const [decisionNote, setDecisionNote] = useState("");
   const [statusMessage, setStatusMessage] = useState(null);
-  const [history, setHistory] = useState(() =>
-    initialRequests
-      .filter((req) => req.status !== "pending")
-      .map((req) => ({
-        id: req.id,
-        driver: req.driver,
-        vehicle: req.vehicle,
-        date: req.date,
-        mileage: req.mileage,
-        type: req.type,
-        workshop: req.workshop || "",
-        cost: req.cost || "",
-        nextDueDate: req.nextDueDate || "",
-        status: req.status,
-        resolvedAt: req.resolvedAt || req.date,
-        notes: req.notes || "",
-      }))
-  );
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isHistoryRefreshing, setIsHistoryRefreshing] = useState(false);
+  const [history, setHistory] = useState([]);
+  const [selectedHistoryId, setSelectedHistoryId] = useState(null);
   const [jobCardInfo, setJobCardInfo] = useState(() => buildJobCardDefaults(null));
   const [jobCardRepairs, setJobCardRepairs] = useState([createJobCardRepairRow()]);
   const [jobCardSnapshots, setJobCardSnapshots] = useState({});
@@ -193,6 +179,43 @@ export default function MaintenanceDashboard() {
     });
   }, [requests]);
 
+  const loadHistoryFromDb = useCallback(async () => {
+    try {
+      const response = await fetch("/api/maintenance/history", {
+        method: "GET",
+        cache: "no-store",
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.success || !Array.isArray(data.history)) return false;
+      setHistory(data.history);
+      return true;
+    } catch (error) {
+      console.error("Failed to fetch maintenance history:", error);
+      return false;
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadHistoryFromDb();
+  }, [loadHistoryFromDb]);
+
+  useEffect(() => {
+    setSelectedHistoryId((prev) => {
+      if (prev && history.some((record) => record.id === prev)) return prev;
+      return history[0]?.id ?? null;
+    });
+  }, [history]);
+
+  const handleRefreshHistory = async () => {
+    if (isHistoryRefreshing) return;
+    setIsHistoryRefreshing(true);
+    try {
+      await loadHistoryFromDb();
+    } finally {
+      setIsHistoryRefreshing(false);
+    }
+  };
+
   const t = useMemo(
     () => ({
       en: {
@@ -203,6 +226,8 @@ export default function MaintenanceDashboard() {
         noSelection: "Select a maintenance request to begin.",
         pendingRequests: "Pending Maintenance Requests",
         historyHeader: "Completed or Rejected Records",
+        refreshHistory: "Refresh",
+        historyDetails: "Record Details",
         status: "Status",
         statusPending: "Pending",
         statusApproved: "Approved",
@@ -231,12 +256,18 @@ export default function MaintenanceDashboard() {
         mileagePhoto: "Odometer / Mileage Photo",
         uploadFiles: "Upload Receipts or Attachments",
         submit: "Save Update",
+        saveJobCard: "Save Job Card",
+        completeProcess: "Complete Process",
+        completeHelp: "Use Complete Process to save the job card and send this request as approved.",
         approve: "Approve",
         reject: "Reject",
         rejectionNote: "Decision note",
         rejectionPlaceholder: "Optional: explain why the request was rejected",
         messageSaved: "Request details updated.",
+        messageSavedDb: "Request and job card saved to database.",
+        messageSavedLocalOnly: "Request saved locally, but job card database save failed.",
         messageApproved: "Request approved and added to history.",
+        messageApprovePersistFailed: "Could not complete process because maintenance record was not saved to database.",
         messageRejected: "Request rejected.",
         validationMissing:
           "Please complete date, mileage, type, workshop, cost, and next service date before approving.",
@@ -305,6 +336,8 @@ export default function MaintenanceDashboard() {
         noSelection: "اختر طلب صيانة للبدء.",
         pendingRequests: "طلبات صيانة قيد المراجعة",
         historyHeader: "السجلات المكتملة أو المرفوضة",
+        refreshHistory: "تحديث",
+        historyDetails: "تفاصيل السجل",
         status: "الحالة",
         statusPending: "قيد المراجعة",
         statusApproved: "مقبول",
@@ -333,12 +366,18 @@ export default function MaintenanceDashboard() {
         mileagePhoto: "صورة عداد الكيلومترات",
         uploadFiles: "تحميل الفواتير أو المرفقات",
         submit: "حفظ التحديث",
+        saveJobCard: "حفظ نموذج الإصلاح",
+        completeProcess: "إكمال الإجراء",
+        completeHelp: "استخدم إكمال الإجراء لحفظ نموذج الإصلاح واعتماد الطلب.",
         approve: "اعتماد",
         reject: "رفض",
         rejectionNote: "ملاحظة القرار",
         rejectionPlaceholder: "اختياري: وضح سبب الرفض",
         messageSaved: "تم تحديث تفاصيل الطلب.",
+        messageSavedDb: "تم حفظ الطلب ونموذج الإصلاح في قاعدة البيانات.",
+        messageSavedLocalOnly: "تم حفظ الطلب محلياً، لكن فشل حفظ نموذج الإصلاح في قاعدة البيانات.",
         messageApproved: "تم اعتماد الطلب وإضافته إلى السجل.",
+        messageApprovePersistFailed: "تعذر إكمال الإجراء لأن سجل الصيانة لم يُحفظ في قاعدة البيانات.",
         messageRejected: "تم رفض الطلب.",
         validationMissing: "يرجى استكمال التاريخ والعداد والنوع والورشة والتكلفة وموعد الخدمة التالية قبل الاعتماد.",
         emptyRequests: "لا توجد طلبات صيانة بانتظار المراجعة.",
@@ -406,6 +445,8 @@ export default function MaintenanceDashboard() {
         noSelection: "براہ کرم جائزہ شروع کرنے کیلئے ایک درخواست منتخب کریں۔",
         pendingRequests: "زیرِ جائزہ مینٹیننس درخواستیں",
         historyHeader: "مکمل یا مسترد شدہ ریکارڈ",
+        refreshHistory: "ریفریش",
+        historyDetails: "ریکارڈ کی تفصیل",
         status: "حالت",
         statusPending: "زیرِ جائزہ",
         statusApproved: "منظور شدہ",
@@ -434,12 +475,18 @@ export default function MaintenanceDashboard() {
         mileagePhoto: "اوڈومیٹر / مائلیج تصویر",
         uploadFiles: "رسیدیں یا اٹیچمنٹس اپ لوڈ کریں",
         submit: "اپ ڈیٹ محفوظ کریں",
+        saveJobCard: "جاب کارڈ محفوظ کریں",
+        completeProcess: "عمل مکمل کریں",
+        completeHelp: "عمل مکمل کریں بٹن جاب کارڈ محفوظ کر کے درخواست منظور کر دیتا ہے۔",
         approve: "منظور کریں",
         reject: "مسترد کریں",
         rejectionNote: "فیصلہ نوٹ",
         rejectionPlaceholder: "اختیاری: مسترد کرنے کی وجہ بتائیں",
         messageSaved: "درخواست کی تفصیلات اپ ڈیٹ ہو گئیں۔",
+        messageSavedDb: "درخواست اور جاب کارڈ ڈیٹابیس میں محفوظ ہو گئے۔",
+        messageSavedLocalOnly: "درخواست مقامی طور پر محفوظ ہوئی، لیکن جاب کارڈ ڈیٹابیس میں محفوظ نہیں ہو سکا۔",
         messageApproved: "درخواست منظور ہو گئی اور ہسٹری میں شامل کی گئی۔",
+        messageApprovePersistFailed: "عمل مکمل نہ ہو سکا کیونکہ مینٹیننس ریکارڈ ڈیٹابیس میں محفوظ نہیں ہوا۔",
         messageRejected: "درخواست مسترد ہو گئی۔",
         validationMissing: "براہ کرم تاریخ، مائلیج، قسم، ورکشاپ، لاگت اور اگلی سروس کی تاریخ مکمل کریں۔",
         emptyRequests: "کوئی درخواستیں زیرِ جائزہ نہیں ہیں۔",
@@ -528,6 +575,10 @@ export default function MaintenanceDashboard() {
   const selectedRequest = useMemo(
     () => requests.find((req) => req.id === selectedRequestId) || null,
     [requests, selectedRequestId]
+  );
+  const selectedHistoryRecord = useMemo(
+    () => history.find((record) => record.id === selectedHistoryId) || null,
+    [history, selectedHistoryId]
   );
 
   const showSpareParts = SPARE_PART_TYPES.has(formData.type);
@@ -819,6 +870,26 @@ export default function MaintenanceDashboard() {
         value && String(value).trim()
       )
     );
+    const workshopRows = [
+      { label: strings.date, value: formData.date },
+      { label: strings.mileage, value: formData.mileage ? `${formData.mileage} ${strings.kmUnit}` : "" },
+      { label: strings.type, value: formatTypeLabel(formData.type) },
+      { label: strings.workshop, value: formData.workshop },
+      { label: strings.cost, value: formData.cost },
+      { label: strings.nextDue, value: formData.nextDueDate },
+      { label: strings.detailNotes, value: formData.details },
+    ];
+    const workshopTableRows = workshopRows
+      .map(
+        (row) => `
+          <tr>
+            <td class="label-cell">${escapeHtml(row.label)}</td>
+            <td>${safeMultiline(row.value)}</td>
+          </tr>
+        `
+      )
+      .join("");
+
     const repairsTableRows = populatedRepairs.length
       ? populatedRepairs
           .map(
@@ -857,6 +928,8 @@ export default function MaintenanceDashboard() {
             table.repairs th { background: #f8fafc; text-align: left; font-size: 12px; }
             table.repairs th, table.repairs td { border: 1px solid #e2e8f0; padding: 8px; }
             table.repairs td.empty { text-align: center; color: #94a3b8; }
+            table.workshop td { border: 1px solid #e2e8f0; padding: 8px; vertical-align: top; }
+            table.workshop .label-cell { width: 220px; font-size: 12px; color: #334155; background: #f8fafc; font-weight: 600; }
             .notes { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 16px; margin-top: 20px; }
             .notes div { border: 1px solid #e2e8f0; padding: 12px; min-height: 90px; }
             .notes strong { display: block; font-size: 13px; color: #0f172a; margin-bottom: 6px; }
@@ -880,6 +953,10 @@ export default function MaintenanceDashboard() {
           <div class="job-number">${escapeHtml(jc.jobNo)}: ${safeValue(jobCardInfo.jobNo)}</div>
           <table class="info">
             ${infoTableRows}
+          </table>
+          <h3 style="margin-top:24px;">${escapeHtml(strings.workshopCard)}</h3>
+          <table class="workshop">
+            <tbody>${workshopTableRows}</tbody>
           </table>
           <h3 style="margin-top:24px;">${escapeHtml(jc.workshopSection)}</h3>
           <table class="repairs">
@@ -931,10 +1008,87 @@ export default function MaintenanceDashboard() {
     popup.print();
   };
 
-  const handleMaintenanceSubmit = (event) => {
-    event.preventDefault();
-    if (!selectedRequest) return;
+  const loadJobCardSnapshotFromDb = useCallback(async (requestId) => {
+    try {
+      const response = await fetch(`/api/maintenance/job-card?requestId=${encodeURIComponent(requestId)}`, {
+        method: "GET",
+        cache: "no-store",
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.success || !data?.snapshot) return null;
+      const info = data.snapshot.info && typeof data.snapshot.info === "object" ? data.snapshot.info : {};
+      const repairs = Array.isArray(data.snapshot.repairs) ? data.snapshot.repairs : [createJobCardRepairRow()];
+      return {
+        info,
+        repairs: repairs.length ? repairs : [createJobCardRepairRow()],
+      };
+    } catch (error) {
+      console.error("Failed to fetch job card snapshot:", error);
+      return null;
+    }
+  }, []);
 
+  const saveJobCardSnapshotToDb = useCallback(async (requestId, snapshot) => {
+    const response = await fetch("/api/maintenance/job-card", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ requestId, snapshot }),
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data?.success || !data?.snapshot) {
+      throw new Error(data?.error || "Failed to save snapshot.");
+    }
+    return {
+      info: data.snapshot.info && typeof data.snapshot.info === "object" ? data.snapshot.info : {},
+      repairs: Array.isArray(data.snapshot.repairs) ? data.snapshot.repairs : [],
+    };
+  }, []);
+
+  const createMaintenanceRecordInDb = useCallback(async (requestData, workshopData) => {
+    const response = await fetch("/api/maintenance", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        vehicleId: requestData?.vehicleId || "",
+        vehicleLabel: requestData?.vehicle || "",
+        date: workshopData.date,
+        mileage: workshopData.mileage,
+        type: workshopData.type,
+        workshop: workshopData.workshop,
+        details: workshopData.details,
+        cost: workshopData.cost,
+        nextDueDate: workshopData.nextDueDate,
+      }),
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data?.success) {
+      throw new Error(data?.error || "Failed to save maintenance record.");
+    }
+    return data.maintenance;
+  }, []);
+
+  useEffect(() => {
+    if (!selectedRequest) return;
+    if (jobCardSnapshots[selectedRequest.id]) return;
+
+    let cancelled = false;
+    (async () => {
+      const snapshot = await loadJobCardSnapshotFromDb(selectedRequest.id);
+      if (cancelled || !snapshot) return;
+      setJobCardSnapshots((prev) => (prev[selectedRequest.id] ? prev : { ...prev, [selectedRequest.id]: snapshot }));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedRequest, jobCardSnapshots, loadJobCardSnapshotFromDb]);
+
+  const persistCurrentRequestAndSnapshot = useCallback(async (showStatus = true) => {
+    if (!selectedRequest) return false;
     setRequests((prev) =>
       prev.map((req) =>
         req.id === selectedRequest.id
@@ -950,15 +1104,73 @@ export default function MaintenanceDashboard() {
     );
 
     const snapshot = {
-      info: { ...jobCardInfo },
+      info: {
+        ...jobCardInfo,
+        workshopDate: formData.date || "",
+        workshopMileage: formData.mileage ? `${formData.mileage} ${strings.kmUnit}` : "",
+        workshopType: formatTypeLabel(formData.type),
+        workshopName: formData.workshop || "",
+        workshopCost: formData.cost || "",
+        workshopNextDueDate: formData.nextDueDate || "",
+        workshopDetails: formData.details || "",
+      },
       repairs: jobCardRepairs.map((row) => ({ ...row })),
     };
     setJobCardSnapshots((prev) => ({ ...prev, [selectedRequest.id]: snapshot }));
 
-    setStatusMessage({ type: "success", text: strings.messageSaved });
+    try {
+      const persistedSnapshot = await saveJobCardSnapshotToDb(selectedRequest.id, snapshot);
+      setJobCardSnapshots((prev) => ({ ...prev, [selectedRequest.id]: persistedSnapshot }));
+      if (showStatus) {
+        setStatusMessage({ type: "success", text: strings.messageSavedDb });
+      }
+      return true;
+    } catch (error) {
+      console.error("Failed to persist job card snapshot:", error);
+      if (showStatus) {
+        setStatusMessage({ type: "warning", text: strings.messageSavedLocalOnly });
+      }
+      return false;
+    }
+  }, [
+    selectedRequest,
+    formData,
+    spareParts,
+    attachments,
+    mileagePhoto,
+    jobCardInfo,
+    jobCardRepairs,
+    strings.kmUnit,
+    strings.messageSavedDb,
+    strings.messageSavedLocalOnly,
+    formatTypeLabel,
+    saveJobCardSnapshotToDb,
+  ]);
+
+  const handleMaintenanceSubmit = async (event) => {
+    event.preventDefault();
+    if (isProcessing) return;
+    setIsProcessing(true);
+    try {
+      await persistCurrentRequestAndSnapshot(true);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  const handleDecision = (decision) => {
+  const handleCompleteProcess = async () => {
+    if (!selectedRequest || selectedRequest.status !== "pending" || isProcessing) return;
+    setIsProcessing(true);
+    try {
+      const saved = await persistCurrentRequestAndSnapshot(true);
+      if (!saved) return;
+      await handleDecision("approve");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleDecision = async (decision) => {
     if (!selectedRequest) return;
 
     if (decision === "approve") {
@@ -966,6 +1178,16 @@ export default function MaintenanceDashboard() {
       const hasMissing = requiredFields.some((field) => !formData[field]);
       if (hasMissing) {
         setStatusMessage({ type: "error", text: strings.validationMissing });
+        return;
+      }
+      try {
+        await createMaintenanceRecordInDb(selectedRequest, formData);
+      } catch (error) {
+        console.error("Failed to persist maintenance record:", error);
+        setStatusMessage({
+          type: "error",
+          text: `${strings.messageApprovePersistFailed} ${error?.message ? `(${error.message})` : ""}`.trim(),
+        });
         return;
       }
     }
@@ -994,23 +1216,27 @@ export default function MaintenanceDashboard() {
       return updated;
     });
 
-    setHistory((prev) => [
-      {
-        id: selectedRequest.id,
-        driver: selectedRequest.driver,
-        vehicle: selectedRequest.vehicle,
-        date: formData.date,
-        mileage: formData.mileage,
-        type: formData.type,
-        workshop: formData.workshop,
-        cost: formData.cost,
-        nextDueDate: formData.nextDueDate,
-        status: nextStatus,
-        resolvedAt,
-        notes: decisionNote,
-      },
-      ...prev.filter((item) => item.id !== selectedRequest.id),
-    ]);
+    if (decision === "approve") {
+      await loadHistoryFromDb();
+    } else {
+      setHistory((prev) => [
+        {
+          id: selectedRequest.id,
+          driver: selectedRequest.driver,
+          vehicle: selectedRequest.vehicle,
+          date: formData.date,
+          mileage: formData.mileage,
+          type: formData.type,
+          workshop: formData.workshop,
+          cost: formData.cost,
+          nextDueDate: formData.nextDueDate,
+          status: nextStatus,
+          resolvedAt,
+          notes: decisionNote,
+        },
+        ...prev.filter((item) => item.id !== selectedRequest.id),
+      ]);
+    }
 
     setStatusMessage({
       type: decision === "approve" ? "success" : "warning",
@@ -1339,37 +1565,7 @@ export default function MaintenanceDashboard() {
                         </div>
                       )}
 
-                      <div className="flex items-center justify-between gap-4">
-                        <button
-                          type="submit"
-                          className="bg-black hover:bg-gray-900 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-md transition"
-                        >
-                          {strings.submit}
-                        </button>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleDecision("approve")}
-                            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-md transition disabled:opacity-50"
-                            disabled={selectedRequest.status !== "pending"}
-                          >
-                            {strings.approve}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDecision("reject")}
-                            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-md transition disabled:opacity-50"
-                            disabled={selectedRequest.status !== "pending"}
-                          >
-                            {strings.reject}
-                          </button>
-                        </div>
-                      </div>
-
-                      {selectedRequest.status !== "pending" && (
-                        <p className="text-xs text-gray-500">{strings.approveDisabled}</p>
-                      )}
-
+                      {/*
                       <div>
                         <label className="block text-sm font-medium text-gray-800 mb-2">
                           {strings.rejectionNote}
@@ -1382,6 +1578,7 @@ export default function MaintenanceDashboard() {
                           className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:outline-none"
                         />
                       </div>
+                      */}
                       </section>
 
                       <section className="space-y-6">
@@ -1558,6 +1755,30 @@ export default function MaintenanceDashboard() {
                           </button>
                         </div>
                       </section>
+
+                      <section className="pt-2 border-t border-gray-100">
+                        <p className="text-xs text-gray-500 mb-3">{strings.completeHelp}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="submit"
+                            disabled={isProcessing}
+                            className="bg-black hover:bg-gray-900 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-md transition disabled:opacity-60"
+                          >
+                            {strings.saveJobCard}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCompleteProcess}
+                            disabled={selectedRequest.status !== "pending" || isProcessing}
+                            className="bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-md transition disabled:opacity-50"
+                          >
+                            {strings.completeProcess}
+                          </button>
+                        </div>
+                        {selectedRequest.status !== "pending" && (
+                          <p className="text-xs text-gray-500 mt-2">{strings.approveDisabled}</p>
+                        )}
+                      </section>
                     </form>
                   </Card>
 
@@ -1577,47 +1798,100 @@ export default function MaintenanceDashboard() {
 
         {activeTab === "history" && (
           <Card title={strings.historyHeader}>
+            <div className="mb-3 flex justify-end">
+              <button
+                type="button"
+                onClick={handleRefreshHistory}
+                disabled={isHistoryRefreshing}
+                className="border border-gray-300 hover:border-gray-500 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-medium disabled:opacity-50"
+              >
+                {strings.refreshHistory}
+              </button>
+            </div>
             {history.length ? (
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm text-left text-gray-800 border border-gray-200 rounded-lg overflow-hidden">
-                  <thead className="bg-gray-100 text-gray-900">
-                    <tr>
-                      <th className="py-3 px-4 font-medium">{strings.driver}</th>
-                      <th className="py-3 px-4 font-medium">{strings.vehicle}</th>
-                      <th className="py-3 px-4 font-medium">{strings.date}</th>
-                      <th className="py-3 px-4 font-medium">{strings.type}</th>
-                      <th className="py-3 px-4 font-medium">{strings.status}</th>
-                      <th className="py-3 px-4 font-medium">{strings.historyResolvedAt}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {history.map((record) => (
-                      <tr key={record.id} className="border-t hover:bg-gray-50 transition">
-                        <td className="py-2.5 px-4 whitespace-nowrap">{record.driver}</td>
-                        <td className="py-2.5 px-4 whitespace-nowrap">{record.vehicle}</td>
-                        <td className="py-2.5 px-4 whitespace-nowrap">{formatDate(record.date)}</td>
-                        <td className="py-2.5 px-4 whitespace-nowrap">{formatTypeLabel(record.type)}</td>
-                        <td className="py-2.5 px-4 whitespace-nowrap">
-                          <span
-                            className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
-                              statusStyles[record.status] || "bg-gray-100 text-gray-600"
+              <div className="space-y-4">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm text-left text-gray-800 border border-gray-200 rounded-lg overflow-hidden">
+                    <thead className="bg-gray-100 text-gray-900">
+                      <tr>
+                        <th className="py-3 px-4 font-medium">{strings.driver}</th>
+                        <th className="py-3 px-4 font-medium">{strings.vehicle}</th>
+                        <th className="py-3 px-4 font-medium">{strings.date}</th>
+                        <th className="py-3 px-4 font-medium">{strings.type}</th>
+                        <th className="py-3 px-4 font-medium">{strings.status}</th>
+                        <th className="py-3 px-4 font-medium">{strings.historyResolvedAt}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {history.map((record) => {
+                        const isSelected = selectedHistoryId === record.id;
+                        return (
+                          <tr
+                            key={record.id}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => setSelectedHistoryId(record.id)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                setSelectedHistoryId(record.id);
+                              }
+                            }}
+                            className={`border-t transition cursor-pointer ${
+                              isSelected ? "bg-gray-100" : "hover:bg-gray-50"
                             }`}
                           >
-                            {record.status === "approved"
-                              ? strings.statusApproved
-                              : record.status === "rejected"
-                              ? strings.statusRejected
-                              : strings.statusPending}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-4 whitespace-nowrap">{formatDate(record.resolvedAt, {
+                            <td className="py-2.5 px-4 whitespace-nowrap">{record.driver}</td>
+                            <td className="py-2.5 px-4 whitespace-nowrap">{record.vehicle}</td>
+                            <td className="py-2.5 px-4 whitespace-nowrap">{formatDate(record.date)}</td>
+                            <td className="py-2.5 px-4 whitespace-nowrap">{formatTypeLabel(record.type)}</td>
+                            <td className="py-2.5 px-4 whitespace-nowrap">
+                              <span
+                                className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
+                                  statusStyles[record.status] || "bg-gray-100 text-gray-600"
+                                }`}
+                              >
+                                {record.status === "approved"
+                                  ? strings.statusApproved
+                                  : record.status === "rejected"
+                                  ? strings.statusRejected
+                                  : strings.statusPending}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-4 whitespace-nowrap">{formatDate(record.resolvedAt, {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                            })}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {selectedHistoryRecord && (
+                  <div className="border border-gray-200 rounded-xl p-4 bg-gray-50">
+                    <h3 className="text-sm font-semibold text-black mb-3">{strings.historyDetails}</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <Field label={strings.driver} value={selectedHistoryRecord.driver || "--"} />
+                      <Field label={strings.vehicle} value={selectedHistoryRecord.vehicle || "--"} />
+                      <Field label={strings.date} value={formatDate(selectedHistoryRecord.date)} />
+                      <Field label={strings.mileage} value={selectedHistoryRecord.mileage || "--"} />
+                      <Field label={strings.type} value={formatTypeLabel(selectedHistoryRecord.type)} />
+                      <Field label={strings.workshop} value={selectedHistoryRecord.workshop || "--"} />
+                      <Field label={strings.cost} value={selectedHistoryRecord.cost || "--"} />
+                      <Field label={strings.nextDue} value={formatDate(selectedHistoryRecord.nextDueDate)} />
+                      <Field
+                        label={strings.historyResolvedAt}
+                        value={formatDate(selectedHistoryRecord.resolvedAt, {
                           dateStyle: "medium",
                           timeStyle: "short",
-                        })}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        })}
+                      />
+                      <Field label={strings.detailNotes} value={selectedHistoryRecord.notes || "--"} />
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <p className="text-sm text-gray-500">{strings.historyEmpty}</p>
@@ -1807,6 +2081,15 @@ function JobCardPreview({ snapshot, strings }) {
   }
 
   const { info, repairs } = snapshot;
+  const workshopInfo = [
+    { label: strings.date, value: info.workshopDate },
+    { label: strings.mileage, value: info.workshopMileage },
+    { label: strings.type, value: info.workshopType },
+    { label: strings.workshop, value: info.workshopName },
+    { label: strings.cost, value: info.workshopCost },
+    { label: strings.nextDue, value: info.workshopNextDueDate },
+    { label: strings.detailNotes, value: info.workshopDetails },
+  ];
   const infoGrid = [
     { label: strings.jobCard.jobNo, value: info.jobNo },
     { label: strings.jobCard.plateNo, value: info.plateNo },
@@ -1837,6 +2120,18 @@ function JobCardPreview({ snapshot, strings }) {
             <p className="font-semibold text-black mt-1">{value || strings.jobCard.noData}</p>
           </div>
         ))}
+      </div>
+
+      <div>
+        <h4 className="text-sm font-semibold text-black mb-2">{strings.workshopCard}</h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-gray-800">
+          {workshopInfo.map(({ label, value }) => (
+            <div key={label} className="border border-gray-200 rounded-xl p-3 bg-gray-50">
+              <p className="text-xs uppercase text-gray-500 tracking-wide">{label}</p>
+              <p className="font-semibold text-black mt-1">{value || strings.jobCard.noData}</p>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div>

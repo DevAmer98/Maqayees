@@ -13,9 +13,11 @@ export async function GET(req) {
   const driverEmail = sessionEmail || queryEmail || "driver@maqayees.com";
   const driverId = sessionUserId || "drv-001";
   const driverName = sessionUserName || "Ahmed Driver";
+  const customDriverId = `DRV-${driverId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 8).toUpperCase()}`;
 
   const driver = {
     id: driverId,
+    customId: customDriverId,
     name: driverName,
     email: driverEmail,
     phone: "0551234567",

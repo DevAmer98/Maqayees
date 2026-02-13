@@ -192,17 +192,17 @@ const buildWalkaroundState = () => {
   return initial;
 };
 
+const areAllWalkaroundChecksComplete = (checks) =>
+  ALL_WALKAROUND_ITEMS.every((item) => Boolean(checks?.[item.id]));
+
 const CHECKLIST_INFO_TEMPLATE = {
   driverId: "",
   driverName: "",
   plateNo: "",
-  startDateTime: "",
-  endDateTime: "",
-  startKm: "",
-  endKm: "",
+  checklistDateTime: "",
+  currentMileage: "",
   shift: "",
   preTripDefects: "",
-  postTripDefects: "",
   dispatcher: "",
   driverSignature: "",
 };
@@ -248,6 +248,8 @@ export default function DriverDashboard() {
   const [dashboardError, setDashboardError] = useState("");
   const [walkaroundChecks, setWalkaroundChecks] = useState(() => buildWalkaroundState());
   const [checklistInfo, setChecklistInfo] = useState(() => ({ ...CHECKLIST_INFO_TEMPLATE }));
+  const [checklistMessage, setChecklistMessage] = useState(null);
+  const [checklistDone, setChecklistDone] = useState(false);
 
   const defaultTab = "vehicle";
   const [activeTab, setActiveTab] = useState(defaultTab);
@@ -295,25 +297,26 @@ export default function DriverDashboard() {
       checklistInfoHint: "Details provided here appear on the exported PDF.",
       inspectionItemLabel: "Inspection Item",
       statusLabel: "Status",
-      beforeEngineStartLabel: "Before Engine Start",
+      beforeEngineStartLabel: "Pre-Trip Checklist",
       afterEngineStartLabel: "After Engine Start",
       driverIdLabel: "Driver ID",
       driverNameLabel: "Driver Name",
       plateNoLabel: "Plate No.",
-      startDateLabel: "Start Date & Time",
-      endDateLabel: "End Date & Time",
-      startKmLabel: "Start KM",
-      endKmLabel: "End KM",
+      checklistDateTimeLabel: "Checklist Date & Time",
+      currentMileageLabel: "Current Mileage",
       shiftLabel: "Shift",
       dayShift: "Day Shift",
       nightShift: "Night Shift",
       preTripDefects: "Pre-Trip Observed Defects",
-      postTripDefects: "Post-Trip Observed Defects",
       dispatcherSignature: "Project Dispatcher",
       driverSignatureLabel: "Driver Signature",
       checklistProgress: "Checklist progress",
       completeChecklistMessage: "All checks completed. Download the PDF below.",
       incompleteChecklistMessage: "Complete every check to unlock the PDF.",
+      checklistDone: "Checklist done.",
+      saveChecklist: "Save Checklist",
+      checklistSaved: "Checklist saved.",
+      checklistSaveFailed: "Failed to save checklist.",
       downloadChecklist: "Download Checklist PDF",
       resetChecklist: "Reset Checklist",
       pdfWindowBlocked: "Pop-up blocked. Allow pop-ups to download the checklist.",
@@ -382,25 +385,26 @@ export default function DriverDashboard() {
       checklistInfoHint: "سيتم إظهار هذه البيانات في ملف PDF المُصدَّر.",
       inspectionItemLabel: "عنصر الفحص",
       statusLabel: "الحالة",
-      beforeEngineStartLabel: "قبل تشغيل المحرك",
+      beforeEngineStartLabel: "قائمة الفحص قبل الانطلاق",
       afterEngineStartLabel: "بعد تشغيل المحرك",
       driverIdLabel: "رقم السائق",
       driverNameLabel: "اسم السائق",
       plateNoLabel: "رقم اللوحة",
-      startDateLabel: "تاريخ ووقت البداية",
-      endDateLabel: "تاريخ ووقت النهاية",
-      startKmLabel: "قراءة البداية",
-      endKmLabel: "قراءة النهاية",
+      checklistDateTimeLabel: "تاريخ ووقت الفحص",
+      currentMileageLabel: "قراءة العداد الحالية",
       shiftLabel: "الوردية",
       dayShift: "وردية نهارية",
       nightShift: "وردية ليلية",
       preTripDefects: "ملاحظات قبل الرحلة",
-      postTripDefects: "ملاحظات بعد الرحلة",
       dispatcherSignature: "مشرف المشروع",
       driverSignatureLabel: "توقيع السائق",
       checklistProgress: "تقدم قائمة الفحص",
       completeChecklistMessage: "تم إكمال جميع الفحوصات. يمكنك تنزيل ملف PDF بالأسفل.",
       incompleteChecklistMessage: "أكمل جميع العناصر لعرض زر التنزيل.",
+      checklistDone: "تم إنجاز قائمة الفحص.",
+      saveChecklist: "حفظ قائمة الفحص",
+      checklistSaved: "تم حفظ قائمة الفحص.",
+      checklistSaveFailed: "تعذر حفظ قائمة الفحص.",
       downloadChecklist: "تنزيل قائمة الفحص PDF",
       resetChecklist: "إعادة ضبط القائمة",
       pdfWindowBlocked: "تم حظر النافذة المنبثقة. يرجى السماح بتنزيل PDF.",
@@ -469,25 +473,26 @@ export default function DriverDashboard() {
       checklistInfoHint: "یہ معلومات PDF میں ظاہر ہو گی۔",
       inspectionItemLabel: "معائنہ آئٹم",
       statusLabel: "حالت",
-      beforeEngineStartLabel: "انجن اسٹارٹ سے پہلے",
+      beforeEngineStartLabel: "روانگی سے پہلے چیک لسٹ",
       afterEngineStartLabel: "انجن اسٹارٹ کے بعد",
       driverIdLabel: "ڈرائیور آئی ڈی",
       driverNameLabel: "ڈرائیور کا نام",
       plateNoLabel: "پلیٹ نمبر",
-      startDateLabel: "شروع ہونے کی تاریخ اور وقت",
-      endDateLabel: "اختتام کی تاریخ اور وقت",
-      startKmLabel: "ابتدائی کلو میٹر",
-      endKmLabel: "اختتامی کلو میٹر",
+      checklistDateTimeLabel: "چیک لسٹ کی تاریخ اور وقت",
+      currentMileageLabel: "موجودہ مائلیج",
       shiftLabel: "شفٹ",
       dayShift: "دن کی شفٹ",
       nightShift: "رات کی شفٹ",
       preTripDefects: "سفر سے پہلے کی خرابیوں",
-      postTripDefects: "سفر کے بعد کی خرابیوں",
       dispatcherSignature: "پروجیکٹ ڈسپیچر",
       driverSignatureLabel: "ڈرائیور دستخط",
       checklistProgress: "چیک لسٹ کی پیش رفت",
       completeChecklistMessage: "تمام چیک مکمل ہو گئے۔ نیچے PDF ڈاؤن لوڈ کریں۔",
       incompleteChecklistMessage: "PDF کے لیے تمام آئٹمز مکمل کریں۔",
+      checklistDone: "چیک لسٹ مکمل ہو گئی۔",
+      saveChecklist: "چیک لسٹ محفوظ کریں",
+      checklistSaved: "چیک لسٹ محفوظ ہو گئی۔",
+      checklistSaveFailed: "چیک لسٹ محفوظ نہیں ہو سکی۔",
       downloadChecklist: "چیک لسٹ PDF ڈاؤن لوڈ کریں",
       resetChecklist: "چیک لسٹ صاف کریں",
       pdfWindowBlocked: "پاپ اپ بلاک ہو گیا۔ براہ کرم PDF ڈاؤن لوڈ کرنے کی اجازت دیں۔",
@@ -586,7 +591,7 @@ export default function DriverDashboard() {
     if (!driver) return;
     setChecklistInfo((prev) => ({
       ...prev,
-      driverId: prev.driverId || driver.id || "",
+      driverId: prev.driverId || driver.customId || driver.iqama || "",
       driverName: prev.driverName || driver.name || "",
     }));
   }, [driver]);
@@ -598,6 +603,44 @@ export default function DriverDashboard() {
       plateNo: prev.plateNo || vehicle.plateNumber || "",
     }));
   }, [vehicle]);
+
+  const loadChecklistFromDb = useCallback(async () => {
+    if (!driver?.id) return;
+    const params = new URLSearchParams();
+    if (activeShiftId) params.set("shiftId", activeShiftId);
+    if (vehicle?.plateNumber || checklistInfo.plateNo) {
+      params.set("vehiclePlate", vehicle?.plateNumber || checklistInfo.plateNo);
+    }
+    const query = params.toString();
+    try {
+      const response = await fetch(`/api/driver/checklist${query ? `?${query}` : ""}`, {
+        method: "GET",
+        cache: "no-store",
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.success || !data?.checklist?.record) return;
+      const record = data.checklist.record;
+      if (record?.checklistInfo && typeof record.checklistInfo === "object") {
+        const persistedInfo = record.checklistInfo;
+        setChecklistInfo((prev) => ({
+          ...prev,
+          ...persistedInfo,
+          checklistDateTime: persistedInfo.checklistDateTime || persistedInfo.startDateTime || prev.checklistDateTime,
+          currentMileage: persistedInfo.currentMileage || persistedInfo.startKm || prev.currentMileage,
+        }));
+      }
+      if (record?.walkaroundChecks && typeof record.walkaroundChecks === "object") {
+        setWalkaroundChecks((prev) => ({ ...prev, ...record.walkaroundChecks }));
+        setChecklistDone(areAllWalkaroundChecksComplete(record.walkaroundChecks));
+      }
+    } catch (error) {
+      console.error("Failed to load saved checklist:", error);
+    }
+  }, [driver?.id, activeShiftId, vehicle?.plateNumber, checklistInfo.plateNo]);
+
+  useEffect(() => {
+    void loadChecklistFromDb();
+  }, [loadChecklistFromDb]);
 
   const maintenanceTypes = useMemo(
     () => [
@@ -632,20 +675,58 @@ export default function DriverDashboard() {
 
   const handleChecklistInfoChange = (field, value) => {
     setChecklistInfo((prev) => ({ ...prev, [field]: value }));
+    setChecklistDone(false);
   };
 
   const handleChecklistToggle = (itemId) => {
     setWalkaroundChecks((prev) => ({ ...prev, [itemId]: !prev[itemId] }));
+    setChecklistDone(false);
   };
 
-  const resetChecklist = () => {
+  const resetChecklist = ({ keepDone = false } = {}) => {
     setWalkaroundChecks(buildWalkaroundState());
     setChecklistInfo({
       ...CHECKLIST_INFO_TEMPLATE,
-      driverId: driver?.id || "",
+      driverId: driver?.customId || driver?.iqama || "",
       driverName: driver?.name || "",
       plateNo: vehicle?.plateNumber || "",
     });
+    if (!keepDone) {
+      setChecklistDone(false);
+    }
+  };
+
+  const handleSaveChecklist = () => {
+    if (!driver?.id) {
+      setChecklistMessage({ type: "error", text: t[lang].checklistSaveFailed });
+      return;
+    }
+    (async () => {
+      try {
+        const response = await fetch("/api/driver/checklist", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            shiftId: activeShiftId || "",
+            vehiclePlate: vehicle?.plateNumber || checklistInfo.plateNo || "",
+            checklistInfo,
+            walkaroundChecks,
+          }),
+        });
+        const data = await response.json().catch(() => null);
+        if (!response.ok || !data?.success) {
+          throw new Error(data?.error || "Failed to save checklist.");
+        }
+        resetChecklist({ keepDone: true });
+        setChecklistDone(true);
+        setChecklistMessage({ type: "success", text: t[lang].checklistSaved });
+      } catch (error) {
+        console.error("Failed to save checklist:", error);
+        setChecklistMessage({ type: "error", text: t[lang].checklistSaveFailed });
+      }
+    })();
   };
 
   const handleChecklistPdf = () => {
@@ -671,10 +752,8 @@ export default function DriverDashboard() {
       { label: t[lang].driverNameLabel, value: checklistInfo.driverName || "—" },
       { label: t[lang].plateNoLabel, value: checklistInfo.plateNo || vehicle?.plateNumber || "—" },
       { label: t[lang].shiftLabel, value: shiftLabel },
-      { label: t[lang].startDateLabel, value: formatChecklistDateTime(checklistInfo.startDateTime) },
-      { label: t[lang].endDateLabel, value: formatChecklistDateTime(checklistInfo.endDateTime) },
-      { label: t[lang].startKmLabel, value: checklistInfo.startKm || "—" },
-      { label: t[lang].endKmLabel, value: checklistInfo.endKm || "—" },
+      { label: t[lang].checklistDateTimeLabel, value: formatChecklistDateTime(checklistInfo.checklistDateTime) },
+      { label: t[lang].currentMileageLabel, value: checklistInfo.currentMileage || "—" },
     ];
 
     const infoTableRows = infoRows
@@ -718,7 +797,6 @@ export default function DriverDashboard() {
     `;
 
     const preTrip = escapeHtml(checklistInfo.preTripDefects || "—");
-    const postTrip = escapeHtml(checklistInfo.postTripDefects || "—");
     const dispatcher = escapeHtml(checklistInfo.dispatcher || "—");
     const driverSignature = escapeHtml(checklistInfo.driverSignature || "—");
 
@@ -759,10 +837,6 @@ export default function DriverDashboard() {
             <div class="note">
               <strong>${escapeHtml(t[lang].preTripDefects)}</strong>
               <p>${preTrip || "—"}</p>
-            </div>
-            <div class="note">
-              <strong>${escapeHtml(t[lang].postTripDefects)}</strong>
-              <p>${postTrip || "—"}</p>
             </div>
           </div>
           <div class="signatures">
@@ -1258,6 +1332,8 @@ export default function DriverDashboard() {
                     Start your shift to complete and submit the daily checklist.
                   </p>
                 )}
+                {onShift && (
+                  <>
                   <p className="text-sm text-gray-600 mb-2">{t[lang].checklistSubtitle}</p>
                   <p className="text-xs text-gray-500 mb-4">{t[lang].checklistInfoHint}</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 text-sm">
@@ -1277,16 +1353,10 @@ export default function DriverDashboard() {
                       onChange={(value) => handleChecklistInfoChange("plateNo", value)}
                     />
                     <ChecklistInput
-                      label={t[lang].startKmLabel}
+                      label={t[lang].currentMileageLabel}
                       type="number"
-                      value={checklistInfo.startKm}
-                      onChange={(value) => handleChecklistInfoChange("startKm", value)}
-                    />
-                    <ChecklistInput
-                      label={t[lang].endKmLabel}
-                      type="number"
-                      value={checklistInfo.endKm}
-                      onChange={(value) => handleChecklistInfoChange("endKm", value)}
+                      value={checklistInfo.currentMileage}
+                      onChange={(value) => handleChecklistInfoChange("currentMileage", value)}
                     />
                     <div>
                       <label className="block text-sm font-medium text-gray-800 mb-1">{t[lang].shiftLabel}</label>
@@ -1312,16 +1382,10 @@ export default function DriverDashboard() {
                       </div>
                     </div>
                     <ChecklistInput
-                      label={t[lang].startDateLabel}
+                      label={t[lang].checklistDateTimeLabel}
                       type="datetime-local"
-                      value={checklistInfo.startDateTime}
-                      onChange={(value) => handleChecklistInfoChange("startDateTime", value)}
-                    />
-                    <ChecklistInput
-                      label={t[lang].endDateLabel}
-                      type="datetime-local"
-                      value={checklistInfo.endDateTime}
-                      onChange={(value) => handleChecklistInfoChange("endDateTime", value)}
+                      value={checklistInfo.checklistDateTime}
+                      onChange={(value) => handleChecklistInfoChange("checklistDateTime", value)}
                     />
                   </div>
 
@@ -1337,17 +1401,11 @@ export default function DriverDashboard() {
                     checks={walkaroundChecks}
                     onToggle={handleChecklistToggle}
                   />
-
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                     <ChecklistTextarea
                       label={t[lang].preTripDefects}
                       value={checklistInfo.preTripDefects}
                       onChange={(value) => handleChecklistInfoChange("preTripDefects", value)}
-                    />
-                    <ChecklistTextarea
-                      label={t[lang].postTripDefects}
-                      value={checklistInfo.postTripDefects}
-                      onChange={(value) => handleChecklistInfoChange("postTripDefects", value)}
                     />
                   </div>
 
@@ -1359,7 +1417,19 @@ export default function DriverDashboard() {
                       {checklistReadyForPdf ? t[lang].completeChecklistMessage : t[lang].incompleteChecklistMessage}
                     </p>
                   </div>
+                  {checklistDone && (
+                    <p className="mt-2 inline-flex w-fit items-center rounded-full border border-green-200 bg-green-50 px-3 py-1 text-xs font-semibold text-green-700">
+                      {t[lang].checklistDone}
+                    </p>
+                  )}
                   <div className="mt-4 flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={handleSaveChecklist}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow"
+                    >
+                      {t[lang].saveChecklist}
+                    </button>
                     {checklistReadyForPdf && (
                       <button
                         onClick={handleChecklistPdf}
@@ -1376,7 +1446,19 @@ export default function DriverDashboard() {
                       {t[lang].resetChecklist}
                     </button>
                   </div>
+                  {checklistMessage && (
+                    <p
+                      className={`mt-3 text-sm ${
+                        checklistMessage.type === "success" ? "text-green-700" : "text-red-700"
+                      }`}
+                    >
+                      {checklistMessage.text}
+                    </p>
+                  )}
+                  </>
+                )}
                 </Card>
+
             </>
           )}
 
