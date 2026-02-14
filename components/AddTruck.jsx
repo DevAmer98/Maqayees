@@ -18,6 +18,7 @@ const createInitialFormState = () => ({
   tankCapacityLiters: "",
   purchaseDate: "",
   initialOdometerKm: "",
+  driverId: "",
   driverName: "",
   projectName: "",
   vehiclePhotos: [],
@@ -29,15 +30,55 @@ export default function AddTruck({ onSuccess }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [submitSuccess, setSubmitSuccess] = useState("");
-
-  const drivers = ["John Doe", "Ali Hassan", "Mohammed Saleh"];
+  const [drivers, setDrivers] = useState([]);
+  const [driversLoading, setDriversLoading] = useState(true);
+  const [driversError, setDriversError] = useState("");
   const projects = ["Project A", "Project B", "Project C"];
   const equipmentTypes = ["Compactor", "Pickup", "Loader", "Tanker", "Bus"];
   const fuelTypes = ["Diesel", "Petrol", "Electric", "Hybrid"]; // ✅ new
 
+  useEffect(() => {
+    let active = true;
+
+    const loadDrivers = async () => {
+      setDriversLoading(true);
+      setDriversError("");
+      try {
+        const response = await fetch("/api/admin/users?role=driver&page=1&pageSize=100");
+        const payload = await response.json();
+        if (!response.ok || !payload?.success) {
+          throw new Error(payload?.error || "Failed to load drivers.");
+        }
+        if (!active) return;
+        setDrivers(Array.isArray(payload.users) ? payload.users : []);
+      } catch (error) {
+        if (!active) return;
+        setDrivers([]);
+        setDriversError(error.message || "Failed to load drivers.");
+      } finally {
+        if (active) setDriversLoading(false);
+      }
+    };
+
+    loadDrivers();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleDriverChange = (e) => {
+    const selectedId = e.target.value;
+    const selectedDriver = drivers.find((driver) => driver.id === selectedId);
+    setFormData((prev) => ({
+      ...prev,
+      driverId: selectedId,
+      driverName: selectedDriver?.name || "",
+    }));
   };
 
   const handleFileChange = (e) => {
@@ -80,6 +121,11 @@ export default function AddTruck({ onSuccess }) {
       return { ...prev, [field]: updated };
     });
   };
+
+  const driverOptions = drivers.map((driver) => ({
+    value: driver.id,
+    label: driver.iqama ? `${driver.name} (${driver.iqama})` : driver.name,
+  }));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -212,11 +258,12 @@ export default function AddTruck({ onSuccess }) {
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Select
               label="Assign Driver"
-              name="driverName"
-              options={drivers}
-              value={formData.driverName}
-              onChange={handleChange}
+              name="driverId"
+              options={driverOptions}
+              value={formData.driverId}
+              onChange={handleDriverChange}
               placeholder="Optional"
+              disabled={driversLoading}
               required={false}
             />
             <Select
@@ -229,6 +276,8 @@ export default function AddTruck({ onSuccess }) {
               required={false}
             />
           </div>
+          {driversLoading && <p className="mt-2 text-xs text-gray-500">Loading drivers...</p>}
+          {driversError && <p className="mt-2 text-xs text-red-600">{driversError}</p>}
         </div>
 
         {/* --- Registration Images --- */}
@@ -339,7 +388,11 @@ function Input({ label, className = "", ...props }) {
   );
 }
 
-function Select({ label, name, options, value, onChange, placeholder = "Select", className = "", required = false }) {
+function Select({ label, name, options, value, onChange, placeholder = "Select", className = "", required = false, disabled = false }) {
+  const normalizedOptions = options.map((opt) =>
+    typeof opt === "string" ? { value: opt, label: opt } : opt
+  );
+
   return (
     <div className="space-y-1">
       <label className="text-sm font-medium text-gray-800">{label}</label>
@@ -347,13 +400,14 @@ function Select({ label, name, options, value, onChange, placeholder = "Select",
         name={name}
         value={value}
         onChange={onChange}
+        disabled={disabled}
         required={required}
         className={`w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 transition focus:border-black focus:outline-none focus:ring-2 focus:ring-black ${className}`}
       >
         <option value="">{placeholder}</option>
-        {options.map((opt) => (
-          <option key={opt} value={opt}>
-            {opt}
+        {normalizedOptions.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
           </option>
         ))}
       </select>

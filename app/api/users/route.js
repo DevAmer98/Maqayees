@@ -17,6 +17,14 @@ const sanitize = (value) => {
   return trimmed.length ? trimmed : null;
 };
 
+const normalizePhone = (value) => {
+  const cleaned = sanitize(value);
+  if (!cleaned) return null;
+  return cleaned.replace(/[()\s-]/g, "");
+};
+
+const isValidPhone = (value) => /^\+?[1-9]\d{7,14}$/.test(value);
+
 const generateTempPassword = () => {
   const random = Math.random().toString(36).slice(-6);
   const timestamp = Date.now().toString(36).slice(-4);
@@ -80,8 +88,15 @@ export async function POST(req) {
 
   const iqama = sanitize(payload?.iqama);
   const passport = sanitize(payload?.passport);
-  const phone = sanitize(payload?.phone);
+  const phone = normalizePhone(payload?.phone);
   let drivingLicensePhoto = sanitize(payload?.drivingLicensePhoto);
+
+  if (phone && !isValidPhone(phone)) {
+    return NextResponse.json(
+      { success: false, error: "Phone number is invalid. Use an international format like +966512345678." },
+      { status: 400 }
+    );
+  }
 
   if (licenseFile) {
     try {
@@ -95,6 +110,20 @@ export async function POST(req) {
   const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
 
   try {
+    if (iqama) {
+      const existingIqamaUser = await prisma.user.findFirst({
+        where: { iqama },
+        select: { id: true },
+      });
+
+      if (existingIqamaUser) {
+        return NextResponse.json(
+          { success: false, error: "A user with this Iqama / ID already exists." },
+          { status: 409 }
+        );
+      }
+    }
+
     const user = await prisma.user.create({
       data: {
         name,
@@ -129,6 +158,13 @@ export async function POST(req) {
     );
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const target = Array.isArray(error.meta?.target) ? error.meta.target : [];
+      if (target.includes("iqama")) {
+        return NextResponse.json(
+          { success: false, error: "A user with this Iqama / ID already exists." },
+          { status: 409 }
+        );
+      }
       return NextResponse.json({ success: false, error: "A user with this email already exists." }, { status: 409 });
     }
     console.error("Failed to create user:", error);

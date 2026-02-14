@@ -10,71 +10,167 @@ export async function GET(req) {
   const sessionUserName = session?.user?.name ? String(session.user.name) : "";
   const sessionEmail = session?.user?.email ? String(session.user.email).toLowerCase() : "";
   const queryEmail = (searchParams.get("driverEmail") || "").toLowerCase();
-  const driverEmail = sessionEmail || queryEmail || "driver@maqayees.com";
-  const driverId = sessionUserId || "drv-001";
-  const driverName = sessionUserName || "Ahmed Driver";
-  const customDriverId = `DRV-${driverId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 8).toUpperCase()}`;
+  const lookupEmail = sessionEmail || queryEmail;
+  if (!sessionUserId && !lookupEmail) {
+    return NextResponse.json({ success: false, error: "Unauthorized." }, { status: 401 });
+  }
+
+  let dbDriver = null;
+  try {
+    const userWhere = sessionUserId
+      ? { id: sessionUserId }
+      : { email: lookupEmail };
+
+    dbDriver = await prisma.user.findFirst({
+      where: {
+        ...userWhere,
+        role: "driver",
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        iqama: true,
+        passport: true,
+      },
+    });
+  } catch (error) {
+    console.error("Failed to resolve driver profile", error);
+  }
+
+  const effectiveDriverId = dbDriver?.id || sessionUserId;
+  const effectiveDriverName = dbDriver?.name || sessionUserName;
+  const effectiveDriverEmail = dbDriver?.email || lookupEmail || "";
+  const customDriverId = effectiveDriverId
+    ? `DRV-${effectiveDriverId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 8).toUpperCase()}`
+    : "";
 
   const driver = {
-    id: driverId,
-    customId: customDriverId,
-    name: driverName,
-    email: driverEmail,
-    phone: "0551234567",
-    iqama: "2456789231",
-    passport: "N9876543",
+    id: effectiveDriverId || "",
+    customId: customDriverId || null,
+    name: effectiveDriverName || "",
+    email: effectiveDriverEmail || "",
+    phone: dbDriver?.phone || null,
+    iqama: dbDriver?.iqama || null,
+    passport: dbDriver?.passport || null,
   };
 
-  const vehicle = {
-    id: "veh-1234",
-    plateNumber: "ABC-1234",
-    brand: "Toyota",
-    model: "Hilux",
-    year: 2022,
-    color: "White",
-    project: "Project A",
-    status: "Active",
-  };
+  let assignedVehicle = null;
+  try {
+    if (effectiveDriverId) {
+      assignedVehicle = await prisma.vehicle.findFirst({
+        where: { driverId: effectiveDriverId },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          plateNumber: true,
+          brand: true,
+          model: true,
+          year: true,
+          color: true,
+          projectName: true,
+          status: true,
+        },
+      });
+    }
 
-  const maintenanceRecords = [
-    {
-      id: "mnt-001",
-      date: "2025-10-10",
-      typeKey: "oil_change",
-      typeLabel: "Oil Change",
-      mileage: "52,100 km",
-      cost: "120",
-      workshop: "Al Futtaim Service",
-    },
-    {
-      id: "mnt-002",
-      date: "2025-09-01",
-      typeKey: "preventive_maintenance",
-      typeLabel: "Preventive Maintenance",
-      mileage: "51,250 km",
-      cost: "350",
-      workshop: "Toyota Service Center",
-    },
-  ];
+    if (!assignedVehicle && effectiveDriverName) {
+      assignedVehicle = await prisma.vehicle.findFirst({
+        where: {
+          driverName: {
+            equals: effectiveDriverName,
+            mode: "insensitive",
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          plateNumber: true,
+          brand: true,
+          model: true,
+          year: true,
+          color: true,
+          projectName: true,
+          status: true,
+        },
+      });
+    }
+  } catch (error) {
+    console.error("Failed to resolve assigned vehicle", error);
+  }
+
+  const vehicle = assignedVehicle
+    ? {
+        id: assignedVehicle.id,
+        plateNumber: assignedVehicle.plateNumber,
+        brand: assignedVehicle.brand,
+        model: assignedVehicle.model,
+        year: assignedVehicle.year,
+        color: assignedVehicle.color,
+        project: assignedVehicle.projectName || null,
+        status: assignedVehicle.status || "Active",
+      }
+    : null;
+
+  let maintenanceRecords = [];
+  try {
+    if (assignedVehicle?.id) {
+      const records = await prisma.maintenance.findMany({
+        where: { vehicleId: assignedVehicle.id },
+        orderBy: { date: "desc" },
+        take: 20,
+        select: {
+          id: true,
+          date: true,
+          type: true,
+          mileage: true,
+          cost: true,
+          workshop: true,
+        },
+      });
+
+      maintenanceRecords = records.map((record) => ({
+        id: record.id,
+        date: record.date.toISOString().slice(0, 10),
+        typeKey: record.type || "",
+        typeLabel: record.type
+          ? record.type
+              .split("_")
+              .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+              .join(" ")
+          : "",
+        mileage: `${new Intl.NumberFormat("en-US").format(record.mileage)} km`,
+        cost: record.cost === null || record.cost === undefined ? "N/A" : String(record.cost),
+        workshop: record.workshop || "N/A",
+      }));
+    }
+  } catch (error) {
+    console.error("Failed to resolve maintenance records", error);
+  }
 
   let activeShift = null;
   try {
-    const shiftWhere = {
-      isClosed: false,
-      OR: [],
-    };
-    if (driverEmail) {
-      shiftWhere.OR.push({ driverEmail });
+    const shiftOr = [];
+    if (effectiveDriverEmail) {
+      shiftOr.push({ driverEmail: effectiveDriverEmail });
     }
-    if (queryEmail && queryEmail !== driverEmail) {
-      shiftWhere.OR.push({ driverEmail: queryEmail });
+    if (queryEmail && queryEmail !== effectiveDriverEmail) {
+      shiftOr.push({ driverEmail: queryEmail });
     }
-    if (sessionUserId) {
-      shiftWhere.OR.push({ driverId: sessionUserId });
+    if (effectiveDriverId) {
+      shiftOr.push({ driverId: effectiveDriverId });
     }
 
     const shift = await prisma.driverShift.findFirst({
-      where: shiftWhere,
+      where: shiftOr.length
+        ? {
+            isClosed: false,
+            OR: shiftOr,
+          }
+        : {
+            id: "__no_shift__",
+          },
       orderBy: {
         updatedAt: "desc",
       },

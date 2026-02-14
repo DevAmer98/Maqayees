@@ -1,7 +1,7 @@
 // app/dashboard/vehicles/add/page.jsx
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 
 export default function AddVehiclesPage() {
@@ -22,9 +22,38 @@ export default function AddVehiclesPage() {
     photo: null,
   });
 
-  // Example data; later you’ll load these from backend APIs
-  const drivers = ["John Doe", "Ali Hassan", "Mohammed Saleh"];
+  const [drivers, setDrivers] = useState([]);
+  const [driversLoading, setDriversLoading] = useState(true);
+  const [driversError, setDriversError] = useState("");
   const projects = ["Project A", "Project B", "Project C"];
+
+  useEffect(() => {
+    let active = true;
+    const loadDrivers = async () => {
+      setDriversLoading(true);
+      setDriversError("");
+      try {
+        const response = await fetch("/api/admin/users?role=driver&page=1&pageSize=100");
+        const payload = await response.json();
+        if (!response.ok || !payload?.success) {
+          throw new Error(payload?.error || "Failed to load drivers.");
+        }
+        if (!active) return;
+        setDrivers(Array.isArray(payload.users) ? payload.users : []);
+      } catch (error) {
+        if (!active) return;
+        setDrivers([]);
+        setDriversError(error.message || "Failed to load drivers.");
+      } finally {
+        if (active) setDriversLoading(false);
+      }
+    };
+
+    loadDrivers();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -259,15 +288,18 @@ export default function AddVehiclesPage() {
                 name="driver"
                 value={formData.driver}
                 onChange={handleChange}
+                disabled={driversLoading}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Select Driver</option>
                 {drivers.map((driver) => (
-                  <option key={driver} value={driver}>
-                    {driver}
+                  <option key={driver.id} value={driver.name}>
+                    {driver.iqama ? `${driver.name} (${driver.iqama})` : driver.name}
                   </option>
                 ))}
               </select>
+              {driversLoading && <p className="mt-1 text-xs text-gray-500">Loading drivers...</p>}
+              {driversError && <p className="mt-1 text-xs text-red-600">{driversError}</p>}
             </div>
 
             <div>

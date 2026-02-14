@@ -22,6 +22,7 @@ const allowedUpdateFields = [
   "serialNumber",
   "chassisNumber",
   "projectName",
+  "driverId",
   "driverName",
   "status",
 ];
@@ -120,6 +121,30 @@ export async function PUT(req, { params }) {
 
   if (updates.insuranceExpiry !== undefined) {
     updates.insuranceExpiry = parseDate(updates.insuranceExpiry);
+  }
+
+  if (updates.driverId !== undefined) {
+    const normalizedDriverId =
+      typeof updates.driverId === "string" ? updates.driverId.trim() : updates.driverId;
+
+    if (!normalizedDriverId) {
+      updates.driverId = null;
+      if (updates.driverName === undefined) {
+        updates.driverName = null;
+      }
+    } else {
+      const selectedDriver = await prisma.user.findFirst({
+        where: { id: normalizedDriverId, role: "driver" },
+        select: { id: true, name: true },
+      });
+
+      if (!selectedDriver) {
+        return NextResponse.json({ success: false, error: "Selected driver is invalid." }, { status: 400 });
+      }
+
+      updates.driverId = selectedDriver.id;
+      updates.driverName = selectedDriver.name;
+    }
   }
 
   if (!Object.keys(updates).length) {

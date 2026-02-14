@@ -1,7 +1,7 @@
 // app/dashboard/(role)/(supervisor)/page.jsx
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Bar,
@@ -24,6 +24,25 @@ export default function SupervisorDashboard() {
   const [selectedTruck, setSelectedTruck] = useState("all");
   const [assignment, setAssignment] = useState({ driver: "", truck: "" });
   const [message, setMessage] = useState("");
+  const [drivers, setDrivers] = useState([]);
+  const [trucks, setTrucks] = useState([]);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [dataError, setDataError] = useState("");
+  const [assigning, setAssigning] = useState(false);
+  const [monitorLoading, setMonitorLoading] = useState(true);
+  const [monitorError, setMonitorError] = useState("");
+  const [monitorData, setMonitorData] = useState({
+    driverStatus: [
+      { name: "On Duty", value: 0 },
+      { name: "Off Duty", value: 0 },
+    ],
+    weeklyMileage: [],
+    weeklyFuel: [],
+    activeDrivers: [],
+  });
+  const [maintenanceRecords, setMaintenanceRecords] = useState([]);
+  const [maintenanceLoading, setMaintenanceLoading] = useState(true);
+  const [maintenanceError, setMaintenanceError] = useState("");
 
   // 🔹 Report Form States
   const [formData, setFormData] = useState({
@@ -37,6 +56,8 @@ export default function SupervisorDashboard() {
   const [previewUrl, setPreviewUrl] = useState(null);
   const [lastOdometerByTruck, setLastOdometerByTruck] = useState({});
   const [fuelInsights, setFuelInsights] = useState([]);
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [reportMessage, setReportMessage] = useState("");
 
   const handleReportChange = (e) =>
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -45,63 +66,73 @@ export default function SupervisorDashboard() {
     setFormData({ ...formData, photo: file });
     setPreviewUrl(URL.createObjectURL(file));
   };
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setReportMessage("");
     if (!formData.truckId) {
-      alert("⚠️ Please select a truck before submitting the report.");
+      setReportMessage("Please select a truck before submitting the report.");
       return;
     }
 
-    const currentReading = parseFloat(formData.currentOdometer);
-    const liters = parseFloat(formData.litersFilled);
-    const truckLastOdometer = lastOdometerByTruck[formData.truckId] ?? null;
-    const selectedTruck =
-      trucks.find((truck) => truck.id === formData.truckId) || null;
-    const truckLabel = selectedTruck
-      ? `${selectedTruck.model} — ${selectedTruck.plate}`
-      : "Unassigned Truck";
+    setReportSubmitting(true);
+    try {
+      const response = await fetch("/api/fuel", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          vehicleId: formData.truckId,
+          currentOdometer: formData.currentOdometer,
+          litersFilled: formData.litersFilled,
+          fuelCost: formData.fuelCost,
+          notes: formData.notes,
+          date: new Date().toISOString(),
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || "Failed to submit daily fuel report.");
+      }
 
-    const canCalculate =
-      truckLastOdometer !== null &&
-      Number.isFinite(currentReading) &&
-      Number.isFinite(liters) &&
-      liters > 0 &&
-      currentReading > truckLastOdometer;
+      const summary = payload.summary || {};
+      if (summary.distanceCoveredKm !== null && summary.distanceCoveredKm !== undefined) {
+        const insight = {
+          id: Date.now(),
+          truckId: formData.truckId,
+          truckLabel: summary.truckLabel || "Truck",
+          from: summary.startKmHr,
+          to: summary.endKmHr,
+          distance: Number(summary.distanceCoveredKm).toFixed(1),
+          liters: Number(formData.litersFilled).toFixed(1),
+          efficiency:
+            summary.efficiencyLtrPerKm === null || summary.efficiencyLtrPerKm === undefined
+              ? "0.00"
+              : Number(summary.efficiencyLtrPerKm).toFixed(2),
+        };
+        setFuelInsights((prev) => [insight, ...prev].slice(0, 4));
+      }
 
-    if (canCalculate) {
-      const distance = currentReading - truckLastOdometer;
-      const efficiency = distance / liters;
-      const insight = {
-        id: Date.now(),
-        truckId: formData.truckId,
-        truckLabel,
-        from: truckLastOdometer,
-        to: currentReading,
-        distance: distance.toFixed(1),
-        liters: liters.toFixed(1),
-        efficiency: efficiency.toFixed(2),
-      };
-      setFuelInsights((prev) => [insight, ...prev].slice(0, 4));
-    }
-
-    if (Number.isFinite(currentReading)) {
       setLastOdometerByTruck((prev) => ({
         ...prev,
-        [formData.truckId]: currentReading,
+        [formData.truckId]: Number(formData.currentOdometer),
       }));
+      setFormData((prev) => ({
+        ...prev,
+        currentOdometer: "",
+        litersFilled: "",
+        fuelCost: "",
+        notes: "",
+        photo: null,
+      }));
+      setPreviewUrl(null);
+      setReportMessage("Daily fuel report submitted successfully.");
+      await loadMonitorData();
+    } catch (error) {
+      setReportMessage(error.message || "Failed to submit daily fuel report.");
+    } finally {
+      setReportSubmitting(false);
     }
-
-    console.log("Daily report:", formData);
-    alert(`✅ Daily report submitted for ${truckLabel}.`);
-    setFormData((prev) => ({
-      ...prev,
-      currentOdometer: "",
-      litersFilled: "",
-      fuelCost: "",
-      notes: "",
-      photo: null,
-    }));
-    setPreviewUrl(null);
   };
 
   const supervisor = {
@@ -119,47 +150,136 @@ export default function SupervisorDashboard() {
     { key: "profile", label: "Profile", icon: "👤" },
   ];
 
-  const drivers = [
-    { id: "d1", name: "Ahmed Driver" },
-    { id: "d2", name: "Ali Hassan" },
-    { id: "d3", name: "Omar Khalid" },
-  ];
+  const loadAssignmentData = useCallback(async () => {
+    setDataLoading(true);
+    setDataError("");
+    try {
+      const [driversResponse, trucksResponse] = await Promise.all([
+        fetch("/api/admin/users?role=driver&page=1&pageSize=100", { cache: "no-store" }),
+        fetch("/api/admin/trucks", { cache: "no-store" }),
+      ]);
 
-  const trucks = [
-    { id: "t1", plate: "ABC-1234", model: "Hilux" },
-    { id: "t2", plate: "XYZ-5678", model: "Isuzu D-Max" },
-    { id: "t3", plate: "LMN-9101", model: "Hino 300" },
-  ];
+      const [driversPayload, trucksPayload] = await Promise.all([
+        driversResponse.json(),
+        trucksResponse.json(),
+      ]);
 
-  const maintenanceRecords = [
-    {
-      id: "m1",
-      truck: "Hilux — ABC-1234",
-      service: "Oil Change",
-      date: "2024-09-10",
-      status: "Completed",
-      cost: "180 SAR",
-      notes: "Next inspection due at 75,000 km",
-    },
-    {
-      id: "m2",
-      truck: "Isuzu D-Max — XYZ-5678",
-      service: "Brake Inspection",
-      date: "2024-09-14",
-      status: "Scheduled",
-      cost: "450 SAR",
-      notes: "Awaiting parts arrival",
-    },
-    {
-      id: "m3",
-      truck: "Hino 300 — LMN-9101",
-      service: "Tire Replacement",
-      date: "2024-08-20",
-      status: "Overdue",
-      cost: "1,200 SAR",
-      notes: "Follow up with supplier",
-    },
-  ];
+      if (!driversResponse.ok || !driversPayload?.success) {
+        throw new Error(driversPayload?.error || "Failed to load drivers.");
+      }
+      if (!trucksResponse.ok || !trucksPayload?.success) {
+        throw new Error(trucksPayload?.error || "Failed to load trucks.");
+      }
+
+      setDrivers(Array.isArray(driversPayload.users) ? driversPayload.users : []);
+      setTrucks(
+        Array.isArray(trucksPayload.vehicles)
+          ? trucksPayload.vehicles.map((vehicle) => ({
+              id: vehicle.id,
+              plate: vehicle.plateNumber,
+              model: vehicle.model,
+              brand: vehicle.brand,
+              driverName: vehicle.driverName || "",
+            }))
+          : []
+      );
+    } catch (error) {
+      setDataError(error.message || "Failed to load assignment data.");
+      setDrivers([]);
+      setTrucks([]);
+    } finally {
+      setDataLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadAssignmentData();
+  }, [loadAssignmentData]);
+
+  const loadMonitorData = useCallback(async () => {
+    setMonitorLoading(true);
+    setMonitorError("");
+    try {
+      const query = selectedTruck !== "all" ? `?truckId=${encodeURIComponent(selectedTruck)}` : "";
+      const response = await fetch(`/api/supervisor/monitor${query}`, { cache: "no-store" });
+      const payload = await response.json();
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || "Failed to load monitor data.");
+      }
+
+      setMonitorData({
+        driverStatus: Array.isArray(payload.data?.driverStatus) ? payload.data.driverStatus : [],
+        weeklyMileage: Array.isArray(payload.data?.weeklyMileage) ? payload.data.weeklyMileage : [],
+        weeklyFuel: Array.isArray(payload.data?.weeklyFuel) ? payload.data.weeklyFuel : [],
+        activeDrivers: Array.isArray(payload.data?.activeDrivers) ? payload.data.activeDrivers : [],
+      });
+    } catch (error) {
+      setMonitorError(error.message || "Failed to load monitor data.");
+      setMonitorData((prev) => ({ ...prev, activeDrivers: [] }));
+    } finally {
+      setMonitorLoading(false);
+    }
+  }, [selectedTruck]);
+
+  useEffect(() => {
+    loadMonitorData();
+  }, [loadMonitorData]);
+
+  const formatMaintenanceType = (value) => {
+    const normalized = String(value || "").trim();
+    if (!normalized) return "Inspection";
+    return normalized
+      .split("_")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  };
+
+  const resolveMaintenanceStatus = (record) => {
+    const raw = String(record?.status || "").toLowerCase();
+    if (raw === "completed" || raw === "scheduled" || raw === "overdue") {
+      return raw.charAt(0).toUpperCase() + raw.slice(1);
+    }
+    const nextDue = record?.nextDueDate ? new Date(record.nextDueDate) : null;
+    if (nextDue && !Number.isNaN(nextDue.getTime())) {
+      return nextDue.getTime() < Date.now() ? "Overdue" : "Scheduled";
+    }
+    return "Completed";
+  };
+
+  const loadMaintenanceData = useCallback(async () => {
+    setMaintenanceLoading(true);
+    setMaintenanceError("");
+    try {
+      const response = await fetch("/api/maintenance/history", { cache: "no-store" });
+      const payload = await response.json();
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || "Failed to load maintenance records.");
+      }
+
+      const mapped = Array.isArray(payload.history)
+        ? payload.history.map((record) => ({
+            id: record.id,
+            truck: record.vehicle || "--",
+            service: formatMaintenanceType(record.type),
+            date: record.date || record.resolvedAt,
+            status: resolveMaintenanceStatus(record),
+            cost: record.cost ? `${record.cost} SAR` : "N/A",
+            notes: record.notes || "--",
+          }))
+        : [];
+
+      setMaintenanceRecords(mapped);
+    } catch (error) {
+      setMaintenanceError(error.message || "Failed to load maintenance records.");
+      setMaintenanceRecords([]);
+    } finally {
+      setMaintenanceLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadMaintenanceData();
+  }, [loadMaintenanceData]);
 
   const formatTruckLabel = (truck) => {
     const label = `${truck.model} — ${truck.plate}`;
@@ -225,6 +345,11 @@ export default function SupervisorDashboard() {
 
       {/* Main Content */}
       <main className="flex-1 p-6 md:p-10 mt-16 md:mt-0">
+        {dataError && (
+          <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {dataError}
+          </div>
+        )}
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
@@ -252,6 +377,9 @@ export default function SupervisorDashboard() {
                 selectedTruck={selectedTruck}
                 setSelectedTruck={setSelectedTruck}
                 formatTruckLabel={formatTruckLabel}
+                monitorData={monitorData}
+                monitorLoading={monitorLoading}
+                monitorError={monitorError}
               />
             )}
 
@@ -259,20 +387,44 @@ export default function SupervisorDashboard() {
             {activeTab === "assign" && (
               <Card title="Assign Driver to Truck">
                 <form
-                  onSubmit={(e) => {
+                  onSubmit={async (e) => {
                     e.preventDefault();
                     if (!assignment.driver || !assignment.truck) {
-                      setMessage("⚠️ Please select both a driver and a truck.");
+                      setMessage("Please select both a driver and a truck.");
                       return;
                     }
-                    setMessage(
-                      `✅ ${
-                        drivers.find((d) => d.id === assignment.driver)?.name
-                      } assigned to ${
-                        trucks.find((t) => t.id === assignment.truck)?.plate
-                      } successfully.`
-                    );
-                    setAssignment({ driver: "", truck: "" });
+                    setAssigning(true);
+                    try {
+                      const response = await fetch(`/api/trucks/${assignment.truck}`, {
+                        method: "PUT",
+                        headers: {
+                          "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({ driverId: assignment.driver }),
+                      });
+                      const payload = await response.json();
+                      if (!response.ok || !payload?.success) {
+                        throw new Error(payload?.error || "Failed to assign driver.");
+                      }
+
+                      const selectedDriver = drivers.find((d) => d.id === assignment.driver);
+                      const selectedTruckItem = trucks.find((t) => t.id === assignment.truck);
+                      setMessage(
+                        `${selectedDriver?.name || "Driver"} assigned to ${selectedTruckItem?.plate || "truck"} successfully.`
+                      );
+                      setAssignment({ driver: "", truck: "" });
+                      setTrucks((prev) =>
+                        prev.map((truck) =>
+                          truck.id === assignment.truck
+                            ? { ...truck, driverName: selectedDriver?.name || "" }
+                            : truck
+                        )
+                      );
+                    } catch (error) {
+                      setMessage(error.message || "Failed to assign driver.");
+                    } finally {
+                      setAssigning(false);
+                    }
                   }}
                   className="space-y-4 text-sm"
                 >
@@ -284,7 +436,7 @@ export default function SupervisorDashboard() {
                     }
                     options={drivers.map((d) => ({
                       value: d.id,
-                      label: d.name,
+                      label: d.iqama ? `${d.name} (${d.iqama})` : d.name,
                     }))}
                     placeholder="-- Choose Driver --"
                   />
@@ -303,15 +455,16 @@ export default function SupervisorDashboard() {
 
                   <button
                     type="submit"
+                    disabled={assigning || dataLoading}
                     className="bg-black hover:bg-gray-900 text-white px-5 py-2 rounded-lg font-semibold text-sm shadow-md transition"
                   >
-                    Assign
+                    {assigning ? "Assigning..." : "Assign"}
                   </button>
 
                   {message && (
                     <p
                       className={`mt-2 text-sm ${
-                        message.startsWith("✅")
+                        message.includes("successfully")
                           ? "text-green-600"
                           : "text-red-600"
                       }`}
@@ -456,17 +609,27 @@ export default function SupervisorDashboard() {
                   <div className="flex justify-end">
                     <button
                       type="submit"
+                      disabled={reportSubmitting}
                       className="bg-black hover:bg-gray-900 text-white px-5 py-2 rounded-lg text-sm font-semibold shadow-md transition"
                     >
-                      Submit Report
+                      {reportSubmitting ? "Submitting..." : "Submit Report"}
                     </button>
                   </div>
+                  {reportMessage && (
+                    <p className={`text-sm ${reportMessage.includes("successfully") ? "text-green-600" : "text-red-600"}`}>
+                      {reportMessage}
+                    </p>
+                  )}
                 </form>
               </Card>
             )}
 
             {activeTab === "maintenance" && (
-              <MaintenanceTab records={maintenanceRecords} />
+              <MaintenanceTab
+                records={maintenanceRecords}
+                loading={maintenanceLoading}
+                error={maintenanceError}
+              />
             )}
           </motion.div>
         </AnimatePresence>
@@ -532,12 +695,58 @@ function Select({ label, value, onChange, options, placeholder }) {
 }
 
 /* --- Monitor Tab Extracted --- */
-function MonitorTab({ trucks, selectedTruck, setSelectedTruck, formatTruckLabel }) {
+function MonitorTab({
+  trucks,
+  selectedTruck,
+  setSelectedTruck,
+  formatTruckLabel,
+  monitorData,
+  monitorLoading,
+  monitorError,
+}) {
+  const visibleDrivers = monitorData.activeDrivers;
+
+  const weeklyMileage =
+    monitorData.weeklyMileage.length > 0
+      ? monitorData.weeklyMileage
+      : [
+          { day: "Sun", mileage: 0 },
+          { day: "Mon", mileage: 0 },
+          { day: "Tue", mileage: 0 },
+          { day: "Wed", mileage: 0 },
+          { day: "Thu", mileage: 0 },
+          { day: "Fri", mileage: 0 },
+          { day: "Sat", mileage: 0 },
+        ];
+
+  const weeklyFuel =
+    monitorData.weeklyFuel.length > 0
+      ? monitorData.weeklyFuel
+      : [
+          { day: "Sun", fuel: 0 },
+          { day: "Mon", fuel: 0 },
+          { day: "Tue", fuel: 0 },
+          { day: "Wed", fuel: 0 },
+          { day: "Thu", fuel: 0 },
+          { day: "Fri", fuel: 0 },
+          { day: "Sat", fuel: 0 },
+        ];
+
   return (
     <Card title="Fleet Monitoring">
       <p className="text-gray-600 text-sm mb-4">
         Overview of driver activity and fleet performance
       </p>
+      {monitorError && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {monitorError}
+        </div>
+      )}
+      {monitorLoading && (
+        <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+          Loading monitoring data...
+        </div>
+      )}
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-md font-semibold text-black">Fleet Monitoring</h3>
         <select
@@ -564,10 +773,7 @@ function MonitorTab({ trucks, selectedTruck, setSelectedTruck, formatTruckLabel 
           <ResponsiveContainer width="100%" height={250}>
             <PieChart>
               <Pie
-                data={[
-                  { name: "On Duty", value: 8 },
-                  { name: "Off Duty", value: 4 },
-                ]}
+                data={monitorData.driverStatus}
                 cx="50%"
                 cy="50%"
                 outerRadius={80}
@@ -590,15 +796,7 @@ function MonitorTab({ trucks, selectedTruck, setSelectedTruck, formatTruckLabel 
           </h3>
           <ResponsiveContainer width="100%" height={250}>
             <BarChart
-              data={[
-                { day: "Sat", mileage: 220 },
-                { day: "Sun", mileage: 310 },
-                { day: "Mon", mileage: 290 },
-                { day: "Tue", mileage: 330 },
-                { day: "Wed", mileage: 280 },
-                { day: "Thu", mileage: 340 },
-                { day: "Fri", mileage: 260 },
-              ]}
+              data={weeklyMileage}
             >
               <XAxis dataKey="day" />
               <YAxis />
@@ -615,15 +813,7 @@ function MonitorTab({ trucks, selectedTruck, setSelectedTruck, formatTruckLabel 
           </h3>
           <ResponsiveContainer width="100%" height={250}>
             <LineChart
-              data={[
-                { day: "Sat", fuel: 180 },
-                { day: "Sun", fuel: 195 },
-                { day: "Mon", fuel: 205 },
-                { day: "Tue", fuel: 210 },
-                { day: "Wed", fuel: 190 },
-                { day: "Thu", fuel: 220 },
-                { day: "Fri", fuel: 185 },
-              ]}
+              data={weeklyFuel}
             >
               <XAxis dataKey="day" />
               <YAxis />
@@ -656,29 +846,39 @@ function MonitorTab({ trucks, selectedTruck, setSelectedTruck, formatTruckLabel 
           </tr>
         </thead>
         <tbody>
-          <tr className="border-b hover:bg-gray-50 transition">
-            <td className="py-2.5 px-4">Ahmed Driver</td>
-            <td className="py-2.5 px-4">Hilux - ABC1234</td>
-            <td className="py-2.5 px-4 text-green-600 font-semibold">
-              On Duty
-            </td>
-            <td className="py-2.5 px-4">Today, 1:10 PM</td>
-          </tr>
-          <tr className="border-b hover:bg-gray-50 transition">
-            <td className="py-2.5 px-4">Ali Hassan</td>
-            <td className="py-2.5 px-4">Isuzu - XYZ5678</td>
-            <td className="py-2.5 px-4 text-gray-500 font-semibold">
-              Off Duty
-            </td>
-            <td className="py-2.5 px-4">Today, 9:00 AM</td>
-          </tr>
+          {visibleDrivers.length ? (
+            visibleDrivers.map((driver) => (
+              <tr key={driver.id} className="border-b hover:bg-gray-50 transition">
+                <td className="py-2.5 px-4">{driver.name}</td>
+                <td className="py-2.5 px-4">{driver.truck || "Unassigned"}</td>
+                <td
+                  className={`py-2.5 px-4 font-semibold ${
+                    driver.status === "On Duty" ? "text-green-600" : "text-gray-500"
+                  }`}
+                >
+                  {driver.status}
+                </td>
+                <td className="py-2.5 px-4">
+                  {driver.lastUpdate && driver.lastUpdate !== "—"
+                    ? new Date(driver.lastUpdate).toLocaleString()
+                    : "—"}
+                </td>
+              </tr>
+            ))
+          ) : (
+            <tr>
+              <td className="py-4 px-4 text-gray-500 text-sm" colSpan={4}>
+                No active driver data found.
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </Card>
   );
 }
 
-function MaintenanceTab({ records }) {
+function MaintenanceTab({ records, loading, error }) {
   const summary = records.reduce(
     (acc, record) => {
       const key = record.status.toLowerCase();
@@ -699,6 +899,16 @@ function MaintenanceTab({ records }) {
       <p className="text-gray-600 text-sm mb-6">
         Track recent service history and upcoming maintenance tasks for your fleet.
       </p>
+      {error && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {error}
+        </div>
+      )}
+      {loading && (
+        <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+          Loading maintenance records...
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <MaintenanceStat label="Scheduled" value={summary.scheduled} tone="bg-blue-50" />
@@ -719,30 +929,40 @@ function MaintenanceTab({ records }) {
             </tr>
           </thead>
           <tbody>
-            {records.map((record) => (
-              <tr key={record.id} className="border-t hover:bg-gray-50 transition">
-                <td className="py-2.5 px-4 whitespace-nowrap">{record.truck}</td>
-                <td className="py-2.5 px-4 whitespace-nowrap">{record.service}</td>
-                <td className="py-2.5 px-4 whitespace-nowrap">
-                  {new Intl.DateTimeFormat("en-GB", {
-                    year: "numeric",
-                    month: "short",
-                    day: "2-digit",
-                  }).format(new Date(record.date))}
+            {records.length ? (
+              records.map((record) => (
+                <tr key={record.id} className="border-t hover:bg-gray-50 transition">
+                  <td className="py-2.5 px-4 whitespace-nowrap">{record.truck}</td>
+                  <td className="py-2.5 px-4 whitespace-nowrap">{record.service}</td>
+                  <td className="py-2.5 px-4 whitespace-nowrap">
+                    {record.date
+                      ? new Intl.DateTimeFormat("en-GB", {
+                          year: "numeric",
+                          month: "short",
+                          day: "2-digit",
+                        }).format(new Date(record.date))
+                      : "—"}
+                  </td>
+                  <td className="py-2.5 px-4">
+                    <span
+                      className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
+                        statusStyles[record.status] || "text-gray-700 bg-gray-100"
+                      }`}
+                    >
+                      {record.status}
+                    </span>
+                  </td>
+                  <td className="py-2.5 px-4 whitespace-nowrap">{record.cost}</td>
+                  <td className="py-2.5 px-4 text-gray-600 min-w-[12rem]">{record.notes}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td className="py-4 px-4 text-sm text-gray-500" colSpan={6}>
+                  No maintenance records found.
                 </td>
-                <td className="py-2.5 px-4">
-                  <span
-                    className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
-                      statusStyles[record.status] || "text-gray-700 bg-gray-100"
-                    }`}
-                  >
-                    {record.status}
-                  </span>
-                </td>
-                <td className="py-2.5 px-4 whitespace-nowrap">{record.cost}</td>
-                <td className="py-2.5 px-4 text-gray-600 min-w-[12rem]">{record.notes}</td>
               </tr>
-            ))}
+            )}
           </tbody>
         </table>
       </div>

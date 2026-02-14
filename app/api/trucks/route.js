@@ -107,6 +107,19 @@ async function persistVehicleToDatabase(vehicleData, uploads) {
     throw new Error("Year must be a valid number.");
   }
 
+  const driverId = typeof vehicleData.driverId === "string" ? vehicleData.driverId.trim() : "";
+  let selectedDriver = null;
+  if (driverId) {
+    selectedDriver = await prisma.user.findFirst({
+      where: { id: driverId, role: "driver" },
+      select: { id: true, name: true },
+    });
+
+    if (!selectedDriver) {
+      throw new Error("Selected driver is invalid.");
+    }
+  }
+
   const payload = {
     plateNumber,
     brand,
@@ -123,7 +136,8 @@ async function persistVehicleToDatabase(vehicleData, uploads) {
     serialNumber: vehicleData.serialNumber || null,
     chassisNumber: vehicleData.chassisNumber || null,
     projectName: vehicleData.project || vehicleData.projectName || null,
-    driverName: vehicleData.driver || vehicleData.driverName || null,
+    driverId: selectedDriver?.id || null,
+    driverName: selectedDriver?.name || vehicleData.driver || vehicleData.driverName || null,
     photo: null,
   };
 

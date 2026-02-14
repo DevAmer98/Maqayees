@@ -28,7 +28,7 @@ model User {
   name      String
   email     String   @unique
   phone     String?
-  iqama     String?
+  iqama     String?  @unique
   passport  String?
   drivingLicensePhoto String?
   password  String
