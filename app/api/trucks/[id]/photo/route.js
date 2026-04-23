@@ -2,33 +2,13 @@ import { NextResponse } from "next/server";
 import path from "path";
 import os from "os";
 import { promises as fs } from "fs";
-import { Client } from "basic-ftp";
+import { uploadToSynology, hasSynologyConfig as hasSynologyBase } from "@/lib/synology";
 import prisma from "@/lib/prisma";
 
-const requiredEnvKeys = ["SYNOLOGY_HOST", "SYNOLOGY_PORT", "SYNOLOGY_USER", "SYNOLOGY_PASSWORD", "SYNOLOGY_TRUCK_PATH"];
-const hasSynologyConfig = () => requiredEnvKeys.every((key) => !!process.env[key]);
+const hasSynologyConfig = () => hasSynologyBase(["SYNOLOGY_TRUCK_PATH"]);
 
 const localUploadRoot = path.join(process.cwd(), "public", "uploads", "trucks");
 
-async function uploadToSynology(localFilePath, remoteFilePath) {
-  const client = new Client();
-  client.ftp.verbose = false;
-
-  await client.access({
-    host: process.env.SYNOLOGY_HOST,
-    port: Number(process.env.SYNOLOGY_PORT),
-    user: process.env.SYNOLOGY_USER,
-    password: process.env.SYNOLOGY_PASSWORD,
-    secure: false,
-  });
-
-  const normalizedPath = remoteFilePath.startsWith("/") ? remoteFilePath : `/${remoteFilePath}`;
-  const remoteDir = path.posix.dirname(normalizedPath);
-  await client.ensureDir(remoteDir);
-  await client.uploadFrom(localFilePath, normalizedPath);
-  await client.close();
-  return normalizedPath;
-}
 
 async function saveFileToTemp(file, tempDir, prefix) {
   const buffer = Buffer.from(await file.arrayBuffer());
@@ -79,7 +59,9 @@ export async function POST(req, { params }) {
     const fileExt = path.extname(file.name) || ".jpg";
     const fileName = `vehiclePhoto-${timestamp}${fileExt}`;
     const localRelativePath = `${baseSlug}/vehiclePhotos/${fileName}`;
-    const synologyPathBase = process.env.SYNOLOGY_TRUCK_PATH ? `${process.env.SYNOLOGY_TRUCK_PATH.replace(/\/$/, "")}/${baseSlug}/vehiclePhotos` : null;
+    const rawDriverName = vehicle.driverName || "no-driver";
+    const driverFolder = rawDriverName.trim().replace(/[^a-zA-Z0-9_-]/g, "_") || "no-driver";
+    const synologyPathBase = process.env.SYNOLOGY_TRUCK_PATH ? `${process.env.SYNOLOGY_TRUCK_PATH.replace(/\/$/, "")}/${driverFolder}/trucks/${baseSlug}/vehiclePhotos` : null;
     const remotePathCandidate = hasSynologyConfig() ? `${synologyPathBase}/${fileName}` : null;
 
     let storedPath;

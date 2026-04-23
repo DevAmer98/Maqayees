@@ -17,24 +17,26 @@ export async function GET(req) {
 
   let dbDriver = null;
   try {
-    const userWhere = sessionUserId
-      ? { id: sessionUserId }
-      : { email: lookupEmail };
+    const orClauses = [];
+    if (sessionUserId) orClauses.push({ id: sessionUserId });
+    if (lookupEmail) orClauses.push({ email: lookupEmail });
 
-    dbDriver = await prisma.user.findFirst({
-      where: {
-        ...userWhere,
-        role: "driver",
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        iqama: true,
-        passport: true,
-      },
-    });
+    if (orClauses.length > 0) {
+      dbDriver = await prisma.user.findFirst({
+        where: {
+          role: "driver",
+          OR: orClauses,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          iqama: true,
+          passport: true,
+        },
+      });
+    }
   } catch (error) {
     console.error("Failed to resolve driver profile", error);
   }

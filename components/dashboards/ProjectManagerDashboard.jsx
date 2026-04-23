@@ -28,6 +28,11 @@ import LogoutButton from "@/components/ui/LogoutButton";
 export default function ProjectManagerDashboard() {
   const [activeTab, setActiveTab] = useState("monitor");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [invoices, setInvoices] = useState([]);
+  const [invoiceForm, setInvoiceForm] = useState({ invoiceNumber: "", projectName: "", clientName: "", amount: "", vatAmount: "", type: "payment-certificate", issueDate: "", dueDate: "", notes: "" });
+  const [invoiceMessage, setInvoiceMessage] = useState(null);
+  const [invoiceSubmitting, setInvoiceSubmitting] = useState(false);
+  const [invoicesLoading, setInvoicesLoading] = useState(false);
 const [sortOption, setSortOption] = useState("nameAsc");
 const router = useRouter();
 
@@ -88,6 +93,7 @@ const calculateDuration = (start, end) => {
   { key: "assignDriverTruck", label: "Assign Drivers (Fleet)", icon: "🔗" },
   { key: "dailyReport", label: "Daily Report", icon: "⛽" },
   { key: "maintenance", label: "Maintenance", icon: "🛠️" },
+  { key: "invoices", label: "Invoices", icon: "🧾" },
   { key: "profile", label: "Profile", icon: "👤" },
 ];
 
@@ -421,6 +427,55 @@ const filteredProjects = projects
     if (sortOption === "progressDesc") return b.progress - a.progress;
     return 0;
   });
+
+  // Invoices load + handlers
+  useEffect(() => {
+    if (activeTab !== "invoices") return;
+    setInvoicesLoading(true);
+    fetch("/api/invoices")
+      .then((r) => r.json())
+      .then((d) => { if (d.success) setInvoices(d.invoices); })
+      .finally(() => setInvoicesLoading(false));
+  }, [activeTab]);
+
+  const handleAddInvoice = async (e) => {
+    e.preventDefault();
+    setInvoiceSubmitting(true);
+    setInvoiceMessage(null);
+    try {
+      const res = await fetch("/api/invoices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(invoiceForm),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setInvoiceMessage({ type: "success", text: "Invoice added." });
+        setInvoiceForm({ invoiceNumber: "", projectName: "", clientName: "", amount: "", vatAmount: "", type: "payment-certificate", issueDate: "", dueDate: "", notes: "" });
+        setInvoices((prev) => [data.invoice, ...prev]);
+      } else {
+        setInvoiceMessage({ type: "error", text: data.error });
+      }
+    } catch {
+      setInvoiceMessage({ type: "error", text: "Network error." });
+    } finally {
+      setInvoiceSubmitting(false);
+    }
+  };
+
+  const handleInvoiceStatusChange = async (id, status) => {
+    try {
+      const res = await fetch("/api/invoices", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, status, ...(status === "paid" && { paidDate: new Date().toISOString() }) }),
+      });
+      const data = await res.json();
+      if (data.success) setInvoices((prev) => prev.map((inv) => (inv.id === id ? data.invoice : inv)));
+    } catch {
+      // silent
+    }
+  };
 
 
 
@@ -1521,6 +1576,109 @@ const filteredProjects = projects
 )}
 
 
+
+            {/* ---- INVOICES ---- */}
+            {activeTab === "invoices" && (
+              <div className="space-y-6">
+                <Card title="🧾 Add Invoice / Payment Certificate">
+                  <form onSubmit={handleAddInvoice} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-800 mb-1">Invoice / Cert. Number *</label>
+                      <input required value={invoiceForm.invoiceNumber} onChange={(e) => setInvoiceForm((p) => ({ ...p, invoiceNumber: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. INV-2024-001" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-800 mb-1">Type</label>
+                      <select value={invoiceForm.type} onChange={(e) => setInvoiceForm((p) => ({ ...p, type: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="payment-certificate">Payment Certificate</option>
+                        <option value="invoice">Invoice</option>
+                        <option value="proforma">Proforma</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-800 mb-1">Project</label>
+                      <input value={invoiceForm.projectName} onChange={(e) => setInvoiceForm((p) => ({ ...p, projectName: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Project name" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-800 mb-1">Client</label>
+                      <input value={invoiceForm.clientName} onChange={(e) => setInvoiceForm((p) => ({ ...p, clientName: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Client name" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-800 mb-1">Amount (SAR) *</label>
+                      <input required type="number" min="0" step="0.01" value={invoiceForm.amount} onChange={(e) => setInvoiceForm((p) => ({ ...p, amount: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. 50000" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-800 mb-1">VAT Amount (SAR)</label>
+                      <input type="number" min="0" step="0.01" value={invoiceForm.vatAmount} onChange={(e) => setInvoiceForm((p) => ({ ...p, vatAmount: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Optional" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-800 mb-1">Issue Date</label>
+                      <input type="date" value={invoiceForm.issueDate} onChange={(e) => setInvoiceForm((p) => ({ ...p, issueDate: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-800 mb-1">Due Date</label>
+                      <input type="date" value={invoiceForm.dueDate} onChange={(e) => setInvoiceForm((p) => ({ ...p, dueDate: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-medium text-gray-800 mb-1">Notes</label>
+                      <textarea rows="2" value={invoiceForm.notes} onChange={(e) => setInvoiceForm((p) => ({ ...p, notes: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                    </div>
+                    {invoiceMessage && <p className={`sm:col-span-2 text-sm ${invoiceMessage.type === "success" ? "text-green-600" : "text-red-600"}`}>{invoiceMessage.text}</p>}
+                    <div className="sm:col-span-2 flex justify-end">
+                      <button type="submit" disabled={invoiceSubmitting} className="bg-black text-white px-5 py-2 rounded-lg text-sm font-semibold shadow-md hover:bg-gray-900 transition">
+                        {invoiceSubmitting ? "Saving..." : "Add Invoice"}
+                      </button>
+                    </div>
+                  </form>
+                </Card>
+
+                <Card title="📋 Invoices & Payment Certificates">
+                  {invoicesLoading ? (
+                    <p className="text-sm text-gray-500">Loading...</p>
+                  ) : invoices.length === 0 ? (
+                    <p className="text-sm text-gray-500">No invoices yet.</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-[700px] w-full text-sm text-left text-gray-800">
+                        <thead className="bg-gray-100">
+                          <tr>
+                            {["Number", "Type", "Project", "Client", "Amount", "VAT", "Issue Date", "Due Date", "Status"].map((h) => (
+                              <th key={h} className="py-2 px-3 font-medium text-gray-700">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {invoices.map((inv) => (
+                            <tr key={inv.id} className="border-b hover:bg-gray-50">
+                              <td className="py-2 px-3 font-medium">{inv.invoiceNumber}</td>
+                              <td className="py-2 px-3 capitalize">{inv.type || "—"}</td>
+                              <td className="py-2 px-3">{inv.projectName || "—"}</td>
+                              <td className="py-2 px-3">{inv.clientName || "—"}</td>
+                              <td className="py-2 px-3">SAR {Number(inv.amount).toLocaleString()}</td>
+                              <td className="py-2 px-3">{inv.vatAmount ? `SAR ${Number(inv.vatAmount).toLocaleString()}` : "—"}</td>
+                              <td className="py-2 px-3">{inv.issueDate ? new Date(inv.issueDate).toLocaleDateString() : "—"}</td>
+                              <td className="py-2 px-3">{inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : "—"}</td>
+                              <td className="py-2 px-3">
+                                <select
+                                  value={inv.status}
+                                  onChange={(e) => handleInvoiceStatusChange(inv.id, e.target.value)}
+                                  className="border border-gray-300 rounded px-2 py-1 text-xs"
+                                >
+                                  <option value="pending">Pending</option>
+                                  <option value="submitted">Submitted</option>
+                                  <option value="approved">Approved</option>
+                                  <option value="paid">Paid</option>
+                                  <option value="rejected">Rejected</option>
+                                </select>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Card>
+              </div>
+            )}
 
             {/* ---- PROFILE ---- */}
             {activeTab === "profile" && (

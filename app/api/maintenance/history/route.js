@@ -53,6 +53,7 @@ export async function GET() {
       status: "approved",
       resolvedAt: record.createdAt,
       notes: record.details || "",
+      jobCard: null,
     }));
 
     const snapshotHistory = snapshots.map((snapshot) => {
@@ -73,6 +74,12 @@ export async function GET() {
         status: "approved",
         resolvedAt: snapshot.updatedAt,
         notes: String(info.workshopDetails || info.complaint || ""),
+        jobCard: {
+          requestId: snapshot.requestId,
+          updatedAt: snapshot.updatedAt,
+          info,
+          repairs: Array.isArray(snapshot.repairs) ? snapshot.repairs : [],
+        },
       };
     });
 

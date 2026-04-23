@@ -251,6 +251,17 @@ export default function DriverDashboard() {
   const [checklistMessage, setChecklistMessage] = useState(null);
   const [checklistDone, setChecklistDone] = useState(false);
 
+  // Fuel entry state
+  const [fuelForm, setFuelForm] = useState({ currentOdometer: "", litersFilled: "", fuelCost: "", notes: "" });
+  const [fuelOdometerPhoto, setFuelOdometerPhoto] = useState(null);
+  const [fuelPumpPhoto, setFuelPumpPhoto] = useState(null);
+  const [fuelOdometerPreview, setFuelOdometerPreview] = useState(null);
+  const [fuelPumpPreview, setFuelPumpPreview] = useState(null);
+  const [fuelSubmitting, setFuelSubmitting] = useState(false);
+  const [fuelMessage, setFuelMessage] = useState(null);
+  const [fuelLogs, setFuelLogs] = useState([]);
+
+
   const defaultTab = "vehicle";
   const [activeTab, setActiveTab] = useState(defaultTab);
   const isRTL = lang === "ar" || lang === "ur";
@@ -650,11 +661,49 @@ export default function DriverDashboard() {
     [lang]
   );
 
+  const handleFuelSubmit = async (e) => {
+    e.preventDefault();
+    if (!fuelOdometerPhoto) return setFuelMessage({ type: "error", text: "Odometer photo is required." });
+    if (!fuelPumpPhoto) return setFuelMessage({ type: "error", text: "Fuel pump photo is required." });
+    setFuelSubmitting(true);
+    setFuelMessage(null);
+    try {
+      const fd = new FormData();
+      fd.append("driverId", driver?.id || "");
+      fd.append("vehicleId", vehicle?.id || "");
+      fd.append("driverName", driver?.name || "");
+      fd.append("currentOdometer", fuelForm.currentOdometer);
+      fd.append("litersFilled", fuelForm.litersFilled);
+      if (fuelForm.fuelCost) fd.append("fuelCost", fuelForm.fuelCost);
+      if (fuelForm.notes) fd.append("notes", fuelForm.notes);
+      fd.append("odometerPhoto", fuelOdometerPhoto);
+      fd.append("pumpPhoto", fuelPumpPhoto);
+      const res = await fetch("/api/driver/fuel", { method: "POST", body: fd });
+      const data = await res.json();
+      if (data.success) {
+        setFuelMessage({ type: "success", text: "Fuel entry saved successfully." });
+        setFuelForm({ currentOdometer: "", litersFilled: "", fuelCost: "", notes: "" });
+        setFuelOdometerPhoto(null);
+        setFuelPumpPhoto(null);
+        setFuelOdometerPreview(null);
+        setFuelPumpPreview(null);
+        setFuelLogs((prev) => [data.log, ...prev].slice(0, 10));
+      } else {
+        setFuelMessage({ type: "error", text: data.error || "Failed to save." });
+      }
+    } catch {
+      setFuelMessage({ type: "error", text: "Network error. Please try again." });
+    } finally {
+      setFuelSubmitting(false);
+    }
+  };
+
+
   const navItems = [
     { key: "vehicle", label: t[lang].vehicle, icon: "🚗" },
+    { key: "fuel", label: "Fuel Entry", icon: "⛽" },
     { key: "maintenance", label: t[lang].maintenance, icon: "🧰" },
     { key: "profile", label: t[lang].profile, icon: "👤" },
-
   ];
 
   const completedChecklistItems = useMemo(() => Object.values(walkaroundChecks).filter(Boolean).length, [walkaroundChecks]);
@@ -949,8 +998,8 @@ export default function DriverDashboard() {
 
   const handleStartShift = async () => {
     if (startSubmitting) return;
-    if (!driver || !vehicle) {
-      setStartError("Driver or vehicle information is unavailable. Please refresh.");
+    if (!driver) {
+      setStartError("Driver information is unavailable. Please refresh.");
       return;
     }
     if (!startMileage) {
@@ -1035,8 +1084,8 @@ export default function DriverDashboard() {
 
   const handleEndShift = async () => {
     if (endSubmitting) return;
-    if (!driver || !vehicle) {
-      setEndError("Driver or vehicle information is unavailable. Please refresh.");
+    if (!driver) {
+      setEndError("Driver information is unavailable. Please refresh.");
       return;
     }
     if (!activeShiftId) {
@@ -1537,6 +1586,114 @@ export default function DriverDashboard() {
 
             </>
           )}
+
+          {activeTab === "fuel" && (
+            <Card title="⛽ Fuel Entry">
+              <form onSubmit={handleFuelSubmit} className="space-y-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-800 mb-1">Current Odometer (km)</label>
+                    <input
+                      type="number" min="0" step="0.1" required
+                      value={fuelForm.currentOdometer}
+                      onChange={(e) => setFuelForm((p) => ({ ...p, currentOdometer: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black"
+                      placeholder="e.g. 52300"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-800 mb-1">Liters Filled</label>
+                    <input
+                      type="number" min="0" step="0.1" required
+                      value={fuelForm.litersFilled}
+                      onChange={(e) => setFuelForm((p) => ({ ...p, litersFilled: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black"
+                      placeholder="e.g. 80"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-800 mb-1">Fuel Cost (SAR)</label>
+                    <input
+                      type="number" min="0" step="0.01"
+                      value={fuelForm.fuelCost}
+                      onChange={(e) => setFuelForm((p) => ({ ...p, fuelCost: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black"
+                      placeholder="Optional"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-800 mb-1">Notes</label>
+                    <input
+                      type="text"
+                      value={fuelForm.notes}
+                      onChange={(e) => setFuelForm((p) => ({ ...p, notes: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black"
+                      placeholder="Optional"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-800 mb-1">📷 Odometer Photo <span className="text-red-500">*</span></label>
+                    <input
+                      type="file" accept="image/*" required
+                      onChange={(e) => {
+                        const f = e.target.files[0];
+                        setFuelOdometerPhoto(f || null);
+                        setFuelOdometerPreview(f ? URL.createObjectURL(f) : null);
+                      }}
+                      className="block w-full border border-gray-300 rounded-lg text-sm px-3 py-2"
+                    />
+                    {fuelOdometerPreview && <img src={fuelOdometerPreview} alt="Odometer preview" className="mt-2 h-32 w-full object-cover rounded-lg border" />}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-800 mb-1">📷 Fuel Pump Photo <span className="text-red-500">*</span></label>
+                    <input
+                      type="file" accept="image/*" required
+                      onChange={(e) => {
+                        const f = e.target.files[0];
+                        setFuelPumpPhoto(f || null);
+                        setFuelPumpPreview(f ? URL.createObjectURL(f) : null);
+                      }}
+                      className="block w-full border border-gray-300 rounded-lg text-sm px-3 py-2"
+                    />
+                    {fuelPumpPreview && <img src={fuelPumpPreview} alt="Pump preview" className="mt-2 h-32 w-full object-cover rounded-lg border" />}
+                  </div>
+                </div>
+
+                {fuelMessage && (
+                  <p className={`text-sm ${fuelMessage.type === "success" ? "text-green-600" : "text-red-600"}`}>{fuelMessage.text}</p>
+                )}
+
+                <div className="flex justify-end">
+                  <button
+                    type="submit" disabled={fuelSubmitting}
+                    className="bg-black hover:bg-gray-900 text-white px-5 py-2 rounded-lg text-sm font-semibold shadow-md transition"
+                  >
+                    {fuelSubmitting ? "Submitting..." : "Save Fuel Entry"}
+                  </button>
+                </div>
+              </form>
+
+              {fuelLogs.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="text-base font-semibold text-black mb-3">Recent Fuel Entries</h3>
+                  <div className="space-y-2">
+                    {fuelLogs.map((log) => (
+                      <div key={log.id} className="flex justify-between items-center border border-gray-200 rounded-lg px-4 py-2 text-sm">
+                        <span className="text-gray-600">{new Date(log.createdAt).toLocaleDateString()}</span>
+                        <span>{log.fuelRefilledLiters} L</span>
+                        <span className="text-gray-500">{log.endKmHr} km</span>
+                        {log.efficiencyLtrPerKm && <span className="text-green-600">{(1 / log.efficiencyLtrPerKm).toFixed(1)} km/L</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Card>
+          )}
+
         </div>
       </main>
 
@@ -1568,7 +1725,7 @@ export default function DriverDashboard() {
                   value={startMileage}
                   onChange={(e) => setStartMileage(e.target.value)}
                   className="w-full border border-gray-300 rounded-xl px-3 py-2 focus:ring-2 focus:ring-black text-sm"
-                  placeholder="e.g. 52300"
+                  placeholder="Enter starting mileage"
                 />
               </div>
               <div className="mb-4">
@@ -1664,6 +1821,12 @@ export default function DriverDashboard() {
               <p className="mb-6 text-center text-sm text-gray-600">
                 {t[lang].endMileagePrompt} &nbsp;{t[lang].endUploadPhoto}
               </p>
+              {recordedStartMileage !== null && (
+                <div className="mb-4 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+                  <span className="font-medium">Current odometer:</span>{" "}
+                  {new Intl.NumberFormat("en-US").format(recordedStartMileage)} km
+                </div>
+              )}
               <div className="mb-4">
                 <label className="mb-1 block text-sm font-medium text-gray-700">{t[lang].endMileagePrompt}</label>
                 <input
@@ -1671,7 +1834,7 @@ export default function DriverDashboard() {
                   value={endMileage}
                   onChange={(e) => setEndMileage(e.target.value)}
                   className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-black"
-                  placeholder="e.g. 52840"
+                  placeholder="Enter ending mileage"
                 />
               </div>
               <div className="mb-4">

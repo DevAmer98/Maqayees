@@ -2,33 +2,13 @@ import { NextResponse } from "next/server";
 import path from "path";
 import os from "os";
 import { promises as fs } from "fs";
-import { Client } from "basic-ftp";
+import { uploadToSynology, hasSynologyConfig as hasSynologyBase } from "@/lib/synology";
 import prisma from "@/lib/prisma";
 
 export const runtime = "nodejs";
 
-const requiredEnvKeys = ["SYNOLOGY_HOST", "SYNOLOGY_PORT", "SYNOLOGY_USER", "SYNOLOGY_PASSWORD", "SYNOLOGY_SHIFT_PATH"];
-const hasSynologyConfig = () => requiredEnvKeys.every((key) => !!process.env[key]);
+const hasSynologyConfig = () => hasSynologyBase(["SYNOLOGY_SHIFT_PATH"]);
 
-async function uploadToSynology(localFilePath, remoteFilePath) {
-  const client = new Client();
-  client.ftp.verbose = false;
-
-  await client.access({
-    host: process.env.SYNOLOGY_HOST,
-    port: Number(process.env.SYNOLOGY_PORT),
-    user: process.env.SYNOLOGY_USER,
-    password: process.env.SYNOLOGY_PASSWORD,
-    secure: false,
-  });
-
-  const normalizedPath = remoteFilePath.startsWith("/") ? remoteFilePath : `/${remoteFilePath}`;
-  const remoteDir = path.posix.dirname(normalizedPath);
-  await client.ensureDir(remoteDir);
-  await client.uploadFrom(localFilePath, normalizedPath);
-  await client.close();
-  return normalizedPath;
-}
 
 function sanitizeFileName(value, fallback = "upload") {
   if (!value) return fallback;
@@ -226,8 +206,9 @@ export async function POST(req) {
 
     const shiftId = sanitizeIdentifier(payload.shiftId || `shift-${Date.now()}`);
     const recordedAt = payload.recordedAt || new Date().toISOString();
+    const driverFolder = sanitizeIdentifier(payload.driverName || "unknown-driver", "driver");
     const synologyBase = hasSynologyConfig()
-      ? `${process.env.SYNOLOGY_SHIFT_PATH.replace(/\/$/, "")}/${shiftId}/${eventTypeRaw}`
+      ? `${process.env.SYNOLOGY_SHIFT_PATH.replace(/\/$/, "")}/${driverFolder}/shifts/${shiftId}/${eventTypeRaw}`
       : null;
 
     if (synologyBase) {

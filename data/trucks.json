@@ -1,5 +1,41 @@
 [
   {
+    "id": "truck-1776586827420",
+    "createdAt": "2026-04-19T08:20:28.256Z",
+    "plateNumber": "Am98",
+    "model": "2026",
+    "brand": "Volvo",
+    "year": "2026",
+    "color": "Black",
+    "serialNumber": "98989898",
+    "chassisNumber": "55002233",
+    "registrationExpiry": "2027-01-19",
+    "insuranceExpiry": "2027-01-19",
+    "equipmentType": "Loader",
+    "tankCapacityLiters": "100000",
+    "purchaseDate": "2026-04-19",
+    "initialOdometerKm": "0",
+    "uploads": {
+      "vehiclePhotos": [
+        {
+          "originalName": "Screenshot 2026-03-31 at 4.04.18 PM.png",
+          "remotePath": "/uploads/trucks/Am98_1776586827420/vehiclePhotos/vehiclePhotos-1.png",
+          "localPath": "/uploads/trucks/Am98_1776586827420/vehiclePhotos/vehiclePhotos-1.png",
+          "location": "local"
+        }
+      ],
+      "registrationImages": [
+        {
+          "originalName": "Screenshot 2026-04-19 at 10.11.41 AM.png",
+          "remotePath": "/uploads/trucks/Am98_1776586827420/registrationImages/registrationImages-1.png",
+          "localPath": "/uploads/trucks/Am98_1776586827420/registrationImages/registrationImages-1.png",
+          "location": "local"
+        }
+      ]
+    },
+    "databaseId": "19f7945b-2380-43eb-bc8b-0c33714bd214"
+  },
+  {
     "id": "truck-1771067913750",
     "createdAt": "2026-02-14T11:21:04.152Z",
     "plateNumber": "ASD1233",

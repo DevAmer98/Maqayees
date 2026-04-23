@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
 import path from "path";
-import { Client } from "basic-ftp";
-import { Writable } from "stream";
+import SftpClient from "ssh2-sftp-client";
 
 export const runtime = "nodejs";
 
-const requiredEnvKeys = ["SYNOLOGY_HOST", "SYNOLOGY_PORT", "SYNOLOGY_USER", "SYNOLOGY_PASSWORD"];
+const requiredEnvKeys = ["SYNOLOGY_HOST", "SYNOLOGY_SFTP_PORT", "SYNOLOGY_USER", "SYNOLOGY_PASSWORD"];
 
 const normalizePrefix = (prefix) => {
   if (!prefix) return null;
@@ -29,20 +28,6 @@ const mimeTypes = {
   ".bmp": "image/bmp",
 };
 
-class BufferWriter extends Writable {
-  constructor() {
-    super();
-    this.chunks = [];
-  }
-  _write(chunk, encoding, callback) {
-    this.chunks.push(chunk);
-    callback();
-  }
-  getBuffer() {
-    return Buffer.concat(this.chunks);
-  }
-}
-
 function hasSynologyConfig() {
   return requiredEnvKeys.every((key) => !!process.env[key]);
 }
@@ -63,21 +48,20 @@ function detectMimeType(remotePath) {
 }
 
 async function fetchFileFromSynology(remotePath) {
-  const client = new Client();
-  client.ftp.verbose = false;
+  const sftp = new SftpClient();
 
-  await client.access({
+  await sftp.connect({
     host: process.env.SYNOLOGY_HOST,
-    port: Number(process.env.SYNOLOGY_PORT),
-    user: process.env.SYNOLOGY_USER,
+    port: Number(process.env.SYNOLOGY_SFTP_PORT),
+    username: process.env.SYNOLOGY_USER,
     password: process.env.SYNOLOGY_PASSWORD,
-    secure: false,
   });
 
-  const writer = new BufferWriter();
-  await client.downloadTo(writer, remotePath);
-  await client.close();
-  return writer.getBuffer();
+  try {
+    return await sftp.get(remotePath);
+  } finally {
+    await sftp.end();
+  }
 }
 
 export async function GET(req) {
@@ -106,7 +90,7 @@ export async function GET(req) {
     });
   } catch (error) {
     console.error("Failed to proxy Synology file:", error);
-    const status = error.code === 550 ? 404 : 500;
+    const status = error.code === 2 || error.message?.includes("No such file") ? 404 : 500;
     return NextResponse.json(
       { success: false, error: status === 404 ? "File not found." : "Unable to fetch file." },
       { status }

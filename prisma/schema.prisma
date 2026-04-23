@@ -115,11 +115,84 @@ model FuelLog {
   fuelRefilledLiters Float
   fuelCost           Float?
   distanceCoveredKm  Float?
-  efficiencyLtrPerKm Float? // derived
+  efficiencyLtrPerKm Float?
   operatorName       String?
   notes              String?
+  submittedBy        String?
+  odometerPhotoUrl   String?
+  fuelPumpPhotoUrl   String?
 
   createdAt DateTime @default(now())
+}
+
+model OdometerLog {
+  id        String   @id @default(uuid())
+  driverId  String
+  vehicleId String?
+  reading   Float
+  photoUrl  String?
+  notes     String?
+  date      DateTime @default(now())
+  createdAt DateTime @default(now())
+}
+
+model Employee {
+  id           String       @id @default(uuid())
+  name         String
+  jobTitle     String?
+  nationality  String?
+  phone        String?
+  iqama        String?
+  projectName  String?
+  supervisorId String?
+  startDate    DateTime?
+  status       String       @default("active")
+  createdAt    DateTime     @default(now())
+  attendances  Attendance[]
+}
+
+model Attendance {
+  id         String   @id @default(uuid())
+  employeeId String
+  date       DateTime
+  status     String
+  notes      String?
+  createdAt  DateTime @default(now())
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model ProcurementRequest {
+  id            String    @id @default(uuid())
+  title         String
+  description   String?
+  quantity      Float?
+  unit          String?
+  status        String    @default("pending")
+  requestedBy   String?
+  projectName   String?
+  estimatedCost Float?
+  notes         String?
+  followUpDate  DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Invoice {
+  id            String    @id @default(uuid())
+  invoiceNumber String
+  projectName   String?
+  clientName    String?
+  amount        Float
+  vatAmount     Float?
+  status        String    @default("pending")
+  type          String?
+  issueDate     DateTime?
+  dueDate       DateTime?
+  paidDate      DateTime?
+  notes         String?
+  attachmentUrl String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }
 
 model FuelStandard {

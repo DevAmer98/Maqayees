@@ -2,13 +2,12 @@ import { NextResponse } from "next/server";
 import path from "path";
 import os from "os";
 import { promises as fs } from "fs";
-import { Client } from "basic-ftp";
+import { uploadToSynology, hasSynologyConfig as hasSynologyBase } from "@/lib/synology";
 import prisma from "@/lib/prisma";
 
 export const runtime = "nodejs";
 
-const requiredEnvKeys = ["SYNOLOGY_HOST", "SYNOLOGY_PORT", "SYNOLOGY_USER", "SYNOLOGY_PASSWORD", "SYNOLOGY_TRUCK_PATH"];
-const hasSynologyConfig = () => requiredEnvKeys.every((key) => !!process.env[key]);
+const hasSynologyConfig = () => hasSynologyBase(["SYNOLOGY_TRUCK_PATH"]);
 
 const localUploadRoot = path.join(process.cwd(), "public", "uploads", "trucks");
 const dataDir = path.join(process.cwd(), "data");
@@ -34,25 +33,6 @@ const parseFloatOrNull = (value) => {
   return Number.isNaN(parsed) ? null : parsed;
 };
 
-async function uploadToSynology(localFilePath, remoteFilePath) {
-  const client = new Client();
-  client.ftp.verbose = false;
-
-  await client.access({
-    host: process.env.SYNOLOGY_HOST,
-    port: Number(process.env.SYNOLOGY_PORT),
-    user: process.env.SYNOLOGY_USER,
-    password: process.env.SYNOLOGY_PASSWORD,
-    secure: false,
-  });
-
-  const normalizedPath = remoteFilePath.startsWith("/") ? remoteFilePath : `/${remoteFilePath}`;
-  const remoteDir = path.posix.dirname(normalizedPath);
-  await client.ensureDir(remoteDir);
-  await client.uploadFrom(localFilePath, normalizedPath);
-  await client.close();
-  return normalizedPath;
-}
 
 async function saveFileToTemp(file, tempDir, prefix) {
   const buffer = Buffer.from(await file.arrayBuffer());
@@ -189,8 +169,10 @@ export async function POST(req) {
     const plateSafe = (vehicleData.plateNumber || "vehicle").replace(/[^a-zA-Z0-9_-]/g, "_");
     const timestamp = Date.now();
     const baseSlug = `${plateSafe}_${timestamp}`;
+    const rawDriverName = vehicleData.driverName || vehicleData.driver || "no-driver";
+    const driverFolder = rawDriverName.trim().replace(/[^a-zA-Z0-9_-]/g, "_") || "no-driver";
     const synologyBase = hasSynologyConfig()
-      ? `${process.env.SYNOLOGY_TRUCK_PATH.replace(/\/$/, "")}/${baseSlug}`
+      ? `${process.env.SYNOLOGY_TRUCK_PATH.replace(/\/$/, "")}/${driverFolder}/trucks/${baseSlug}`
       : null;
 
     const uploadResults = { vehiclePhotos: [], registrationImages: [] };
