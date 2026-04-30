@@ -3,7 +3,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { upload } from "@vercel/blob/client";
 import LogoutButton from "@/components/ui/LogoutButton";
 
 const MAX_VEHICLE_PHOTOS = 4;
@@ -22,23 +21,20 @@ const sanitizeUploadName = (name) => {
   return sanitized || "upload";
 };
 
-async function uploadShiftAsset({ file, shiftId, eventType, label }) {
-  const safeName = sanitizeUploadName(file.name);
-  const pathname = `driver-shifts/${shiftId}/${eventType}/${label}-${Date.now()}-${safeName}`;
-  const blob = await upload(pathname, file, {
-    access: "public",
-    handleUploadUrl: SHIFT_UPLOAD_HANDLE_URL,
-    contentType: file.type || "application/octet-stream",
-    clientPayload: JSON.stringify({ shiftId, eventType, label }),
-  });
+async function uploadShiftAsset({ file, shiftId, eventType, label, driverName }) {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("shiftId", shiftId);
+  formData.append("eventType", eventType);
+  formData.append("label", label);
+  formData.append("driverName", driverName || "");
 
-  return {
-    originalName: file.name,
-    url: blob.url,
-    downloadUrl: blob.downloadUrl,
-    pathname: blob.pathname,
-    contentType: blob.contentType,
-  };
+  const res = await fetch(SHIFT_UPLOAD_HANDLE_URL, { method: "POST", body: formData });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "File upload failed.");
+  }
+  return res.json();
 }
 
 const WALKAROUND_ITEMS = {
@@ -266,12 +262,13 @@ export default function DriverDashboard() {
   const [activeTab, setActiveTab] = useState(defaultTab);
   const isRTL = lang === "ar" || lang === "ur";
 
-  const prepareUploadPayload = useCallback(async ({ shiftId, eventType, odometerPhoto, vehiclePhotos }) => {
+  const prepareUploadPayload = useCallback(async ({ shiftId, eventType, odometerPhoto, vehiclePhotos, driverName }) => {
     const odometerUpload = await uploadShiftAsset({
       file: odometerPhoto,
       shiftId,
       eventType,
       label: "odometer",
+      driverName,
     });
 
     const vehicleUploads = await Promise.all(
@@ -281,6 +278,7 @@ export default function DriverDashboard() {
           shiftId,
           eventType,
           label: `vehicle-${index + 1}`,
+          driverName,
         })
       )
     );
@@ -1029,6 +1027,7 @@ export default function DriverDashboard() {
         eventType: "start",
         odometerPhoto: startMileagePhoto,
         vehiclePhotos: startVehiclePhotos,
+        driverName: driver?.name,
       });
 
       const response = await fetch("/api/shifts", {
@@ -1122,6 +1121,7 @@ export default function DriverDashboard() {
         eventType: "end",
         odometerPhoto: endMileagePhoto,
         vehiclePhotos: endVehiclePhotos,
+        driverName: driver?.name,
       });
 
       const response = await fetch("/api/shifts", {

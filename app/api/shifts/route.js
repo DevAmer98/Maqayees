@@ -1,32 +1,7 @@
 import { NextResponse } from "next/server";
-import path from "path";
-import os from "os";
-import { promises as fs } from "fs";
-import { uploadToSynology, hasSynologyConfig as hasSynologyBase } from "@/lib/synology";
 import prisma from "@/lib/prisma";
 
 export const runtime = "nodejs";
-
-const hasSynologyConfig = () => hasSynologyBase(["SYNOLOGY_SHIFT_PATH"]);
-
-
-function sanitizeFileName(value, fallback = "upload") {
-  if (!value) return fallback;
-  const sanitized = value.replace(/[^a-zA-Z0-9._-]/g, "_");
-  return sanitized || fallback;
-}
-
-async function downloadRemoteFile(url, tempDir, fileName) {
-  if (!tempDir) throw new Error("tempDir is required to download remote files.");
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to download uploaded file from ${url}`);
-  }
-  const buffer = Buffer.from(await response.arrayBuffer());
-  const tempPath = path.join(tempDir, fileName);
-  await fs.writeFile(tempPath, buffer);
-  return tempPath;
-}
 
 function sanitizeIdentifier(value, fallbackPrefix = "shift") {
   const trimmed = (value || "").trim();
@@ -35,44 +10,20 @@ function sanitizeIdentifier(value, fallbackPrefix = "shift") {
   return `${fallbackPrefix}-${Date.now()}`;
 }
 
-function ensureUploadPayload(upload) {
+function processUploadedFile({ upload, prefix }) {
   if (!upload || typeof upload.url !== "string") {
-    throw new Error("Uploaded file metadata is missing the \"url\" property.");
+    throw new Error(`Uploaded file metadata is missing the "url" property for "${prefix}".`);
   }
-}
-
-async function processUploadedFile({ upload, prefix, synologyBase, tempDir, cleanupPaths }) {
-  ensureUploadPayload(upload);
-  const sanitizedOriginal = sanitizeFileName(upload.originalName || path.basename(upload.pathname || prefix));
-  const ext = path.extname(upload.pathname || "") || path.extname(upload.originalName || "") || ".jpg";
-  const remotePathCandidate = synologyBase ? `${synologyBase}/${prefix}${ext}` : null;
-
-  let storedPath = upload.url;
-  let location = "blob";
-
-  if (remotePathCandidate && tempDir) {
-    try {
-      const tempFileName = `${prefix}-${Date.now()}${ext}`;
-      const tempPath = await downloadRemoteFile(upload.url, tempDir, tempFileName);
-      cleanupPaths.push(tempPath);
-      storedPath = await uploadToSynology(tempPath, remotePathCandidate);
-      location = "synology";
-    } catch (error) {
-      console.error("Synology upload failed, keeping blob URL:", error);
-    }
-  }
-
   return {
-    originalName: sanitizedOriginal,
-    remotePath: storedPath,
-    blobPath: upload.pathname || null,
-    blobUrl: upload.url,
-    location,
+    originalName: upload.originalName || prefix,
+    remotePath: upload.url,
+    pathname: upload.pathname || upload.url,
+    location: upload.location || "stored",
     contentType: upload.contentType || null,
   };
 }
 
-async function resolveUploads({ uploadsPayload, synologyBase, tempDir, cleanupPaths }) {
+function resolveUploads({ uploadsPayload }) {
   if (!uploadsPayload?.odometerPhoto) {
     throw new Error("An odometer photo upload is required.");
   }
@@ -80,31 +31,12 @@ async function resolveUploads({ uploadsPayload, synologyBase, tempDir, cleanupPa
     throw new Error("At least one vehicle photo upload is required.");
   }
 
-  const uploads = {
-    odometerPhoto: await processUploadedFile({
-      upload: uploadsPayload.odometerPhoto,
-      prefix: "odometer",
-      synologyBase,
-      tempDir,
-      cleanupPaths,
-    }),
-    vehiclePhotos: [],
+  return {
+    odometerPhoto: processUploadedFile({ upload: uploadsPayload.odometerPhoto, prefix: "odometer" }),
+    vehiclePhotos: uploadsPayload.vehiclePhotos.map((fileUpload, index) =>
+      processUploadedFile({ upload: fileUpload, prefix: `vehicle-${index + 1}` })
+    ),
   };
-
-  for (let index = 0; index < uploadsPayload.vehiclePhotos.length; index += 1) {
-    const fileUpload = uploadsPayload.vehiclePhotos[index];
-    const prefix = `vehicle-${index + 1}`;
-    const result = await processUploadedFile({
-      upload: fileUpload,
-      prefix,
-      synologyBase,
-      tempDir,
-      cleanupPaths,
-    });
-    uploads.vehiclePhotos.push(result);
-  }
-
-  return uploads;
 }
 
 async function loadShiftRecord(shiftId) {
@@ -180,9 +112,6 @@ async function persistShiftRecord({ shiftId, eventType, payload, event }) {
 }
 
 export async function POST(req) {
-  const cleanupPaths = [];
-  let tempDir;
-
   try {
     const payload = await req.json();
 
@@ -206,21 +135,8 @@ export async function POST(req) {
 
     const shiftId = sanitizeIdentifier(payload.shiftId || `shift-${Date.now()}`);
     const recordedAt = payload.recordedAt || new Date().toISOString();
-    const driverFolder = sanitizeIdentifier(payload.driverName || "unknown-driver", "driver");
-    const synologyBase = hasSynologyConfig()
-      ? `${process.env.SYNOLOGY_SHIFT_PATH.replace(/\/$/, "")}/${driverFolder}/shifts/${shiftId}/${eventTypeRaw}`
-      : null;
 
-    if (synologyBase) {
-      tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "maq-shift-"));
-    }
-
-    const uploads = await resolveUploads({
-      uploadsPayload: payload.uploads,
-      synologyBase,
-      tempDir,
-      cleanupPaths,
-    });
+    const uploads = resolveUploads({ uploadsPayload: payload.uploads });
 
     const record = await persistShiftRecord({
       shiftId,
@@ -247,16 +163,5 @@ export async function POST(req) {
   } catch (error) {
     console.error("Shift submission failed:", error);
     return NextResponse.json({ success: false, error: "Failed to save driver shift." }, { status: 500 });
-  } finally {
-    await Promise.all(
-      cleanupPaths.map((filePath) =>
-        fs
-          .unlink(filePath)
-          .catch(() => {})
-      )
-    );
-    if (tempDir) {
-      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
-    }
   }
 }
