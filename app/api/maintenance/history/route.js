@@ -6,10 +6,8 @@ export const runtime = "nodejs";
 function normalizeType(value) {
   const normalized = String(value || "").trim().toLowerCase().replace(/\s+/g, "_");
   if (normalized === "ppm" || normalized === "preventive") return "preventive_maintenance";
-  if (normalized === "oil" || normalized === "oilchange") return "oil_change";
-  if (normalized === "inspection" || normalized === "general_inspection") return "inspection";
-  if (normalized === "repair") return "repair";
-  return normalized || "inspection";
+  if (normalized === "preventive_maintenance") return "preventive_maintenance";
+  return "repair";
 }
 
 export async function GET() {

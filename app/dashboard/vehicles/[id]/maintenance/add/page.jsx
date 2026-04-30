@@ -24,7 +24,7 @@ export default function AddMaintenancePage() {
     { name: "", quantity: "", cost: "", invoice: null },
   ]);
 
-  const maintenanceTypes = ["PPM", "Repair", "Oil Change"];
+  const maintenanceTypes = ["PPM", "Repair"];
 
   // Translations
   const t = {
@@ -211,65 +211,55 @@ export default function AddMaintenancePage() {
             </div>
           )}
 
-          {/* Repair or Oil Change */}
-          {(formData.type === "Repair" || formData.type === "Oil Change") && (
+          {/* Repair */}
+          {formData.type === "Repair" && (
             <div className="mt-8">
               <h3 className="font-semibold text-gray-900 mb-3 text-base">
                 {t[lang].upload}
               </h3>
 
               {/* Spare Parts for Repair */}
-              {formData.type === "Repair" && (
-                <>
-                  {spareParts.map((part, index) => (
-                    <div
-                      key={index}
-                      className="border border-gray-200 bg-gray-50 rounded-xl p-4 mb-3 shadow-sm hover:shadow-md transition"
-                    >
-                      <input
-                        type="text"
-                        placeholder="Part name"
-                        value={part.name}
-                        onChange={(e) =>
-                          handlePartChange(index, "name", e.target.value)
-                        }
-                        className="input-style mb-2"
-                      />
-                      <input
-                        type="number"
-                        placeholder="Quantity"
-                        value={part.quantity}
-                        onChange={(e) =>
-                          handlePartChange(index, "quantity", e.target.value)
-                        }
-                        className="input-style mb-2"
-                      />
-                      <input
-                        type="number"
-                        placeholder="Cost (SAR)"
-                        value={part.cost}
-                        onChange={(e) =>
-                          handlePartChange(index, "cost", e.target.value)
-                        }
-                        className="input-style mb-2"
-                      />
+              {spareParts.map((part, index) => (
+                <div
+                  key={index}
+                  className="border border-gray-200 bg-gray-50 rounded-xl p-4 mb-3 shadow-sm hover:shadow-md transition"
+                >
+                  <input
+                    type="text"
+                    placeholder="Part name"
+                    value={part.name}
+                    onChange={(e) => handlePartChange(index, "name", e.target.value)}
+                    className="input-style mb-2"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Quantity"
+                    value={part.quantity}
+                    onChange={(e) => handlePartChange(index, "quantity", e.target.value)}
+                    className="input-style mb-2"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Cost (SAR)"
+                    value={part.cost}
+                    onChange={(e) => handlePartChange(index, "cost", e.target.value)}
+                    className="input-style mb-2"
+                  />
 
-                      <label className="text-sm text-gray-600 block mb-1 font-medium">
-                        Upload Invoice / Attachment
-                      </label>
-                      <input
-                        type="file"
-                        multiple
-                        accept="image/*,.pdf"
-                        onChange={(e) =>
-                          handlePartChange(index, "invoice", e.target.files[0])
-                        }
-                        className="input-style cursor-pointer"
-                      />
-                      {part.invoice && (
-                        <p className="text-sm text-gray-500 mt-1">
-                          File: <strong>{part.invoice.name}</strong>
-                        </p>
+                  <label className="text-sm text-gray-600 block mb-1 font-medium">
+                    Upload Invoice / Attachment
+                  </label>
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*,.pdf"
+                    onChange={(e) => handlePartChange(index, "invoice", e.target.files[0])}
+                    className="input-style cursor-pointer"
+                  />
+                  {part.invoice && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      File: <strong>{part.invoice.name}</strong>
+                    </p>
                   )}
 
                   {spareParts.length > 1 && (
@@ -290,57 +280,6 @@ export default function AddMaintenancePage() {
               >
                 {t[lang].addPart}
               </button>
-            </>
-          )}
-
-              {/* File upload for Oil Change */}
-              {formData.type === "Oil Change" && (
-                <div className="border border-dashed border-gray-300 bg-gray-50 hover:bg-gray-100 rounded-xl p-6 flex flex-col items-center text-center transition">
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*,.pdf"
-                    onChange={handleAttachmentUpload}
-                    className="hidden"
-                    id="file-upload"
-                  />
-                  <label
-                    htmlFor="file-upload"
-                    className="cursor-pointer flex flex-col items-center justify-center text-black hover:text-gray-800"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      strokeWidth="1.5"
-                      stroke="currentColor"
-                      className="w-10 h-10 mb-2 opacity-80"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M12 4.5v15m7.5-7.5h-15"
-                      />
-                    </svg>
-                    <span className="font-medium text-sm">
-                      Click to upload or drag & drop files
-                    </span>
-                    <span className="text-xs text-gray-500 mt-1">
-                      (PNG, JPG, or PDF up to 5MB)
-                    </span>
-                  </label>
-
-                  {formData.attachments.length > 0 && (
-                    <div className="mt-3 space-y-1 text-sm text-gray-600">
-                      {formData.attachments.map((file, i) => (
-                        <p key={i}>
-                          📎 <strong>{file.name}</strong>
-                        </p>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           )}
 

@@ -10,6 +10,14 @@ function parsePlateFromVehicleLabel(label) {
   return parts[1] || parts[0] || "";
 }
 
+function normalizeMaintenanceType(value) {
+  const normalized = String(value || "").trim().toLowerCase().replace(/\s+/g, "_");
+  if (normalized === "ppm" || normalized === "preventive" || normalized === "preventive_maintenance") {
+    return "preventive_maintenance";
+  }
+  return "repair";
+}
+
 function formatVehicleLabel(vehicle) {
   if (!vehicle) return "--";
   return `${vehicle.brand} ${vehicle.model} — ${vehicle.plateNumber}`;
@@ -24,7 +32,7 @@ function serializeMaintenanceRecordAsRequest(record) {
     vehicle: formatVehicleLabel(record.vehicle),
     date: record.date.toISOString().slice(0, 10),
     mileage: String(record.mileage ?? ""),
-    type: record.type,
+    type: normalizeMaintenanceType(record.type),
     submittedAt: record.createdAt,
     status: record.workshop || record.cost != null || record.nextDueDate ? "approved" : "pending",
     resolvedAt: record.workshop || record.cost != null || record.nextDueDate ? record.createdAt : null,
@@ -93,7 +101,8 @@ export async function POST(request) {
 
     const date = body?.date ? new Date(body.date) : null;
     const mileage = Number(body?.mileage);
-    const type = String(body?.type || "").trim();
+    const rawType = String(body?.type || "").trim();
+    const type = normalizeMaintenanceType(rawType);
 
     if (!date || Number.isNaN(date.getTime())) {
       return NextResponse.json({ success: false, error: "Valid maintenance date is required." }, { status: 400 });
@@ -101,7 +110,7 @@ export async function POST(request) {
     if (!Number.isFinite(mileage) || mileage < 0) {
       return NextResponse.json({ success: false, error: "Valid mileage is required." }, { status: 400 });
     }
-    if (!type) {
+    if (!rawType) {
       return NextResponse.json({ success: false, error: "Maintenance type is required." }, { status: 400 });
     }
 
@@ -190,7 +199,7 @@ export async function PATCH(request) {
     const updateData =
       status === "approved"
         ? {
-            type: body?.type ? String(body.type) : undefined,
+            type: body?.type ? normalizeMaintenanceType(body.type) : undefined,
             date: body?.date ? new Date(body.date) : undefined,
             mileage: body?.mileage != null && body.mileage !== "" ? Math.round(Number(body.mileage)) : undefined,
             workshop: body?.workshop ? String(body.workshop) : "Completed",

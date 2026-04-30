@@ -4,12 +4,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import LogoutButton from "@/components/ui/LogoutButton";
 
-const SPARE_PART_TYPES = new Set(["repair", "oil_change"]);
+const SPARE_PART_TYPES = new Set(["repair"]);
 
 const createEmptyPart = () => ({
   id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `part-${Math.random()}`,
   name: "",
+  repTag: "",
   quantity: "",
+  itemCode: "",
   cost: "",
   image: null,
 });
@@ -49,9 +51,9 @@ const mapSparePartsToJobCardRepairs = (parts) => {
     return {
       id: part.id || (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `repair-${Math.random()}`),
       service: part.name || "",
-      repTag: "",
+      repTag: part.repTag || "",
       qty: qtyText,
-      itemCode: "",
+      itemCode: part.itemCode || "",
       unitPrice: costText,
       totalPrice: total,
     };
@@ -307,9 +309,7 @@ export default function MaintenanceDashboard() {
         historyEmpty: "No maintenance history yet.",
         historyResolvedAt: "Resolved",
         kmUnit: "km",
-        oilChange: "Oil Change",
         preventiveMaintenance: "PPM",
-        inspection: "General Inspection",
         repair: "Repair",
         driverRequestCard: "Driver Submission",
         workshopCard: "Workshop Details",
@@ -427,9 +427,7 @@ export default function MaintenanceDashboard() {
         historyEmpty: "لا يوجد سجل صيانة حتى الآن.",
         historyResolvedAt: "تاريخ الإجراء",
         kmUnit: "كم",
-        oilChange: "تغيير الزيت",
         preventiveMaintenance: "صيانة وقائية",
-        inspection: "فحص عام",
         repair: "تصليح",
         driverRequestCard: "طلب السائق",
         workshopCard: "تفاصيل الورشة",
@@ -547,9 +545,7 @@ export default function MaintenanceDashboard() {
         historyEmpty: "ابھی تک کوئی مینٹیننس ہسٹری نہیں۔",
         historyResolvedAt: "فیصلہ",
         kmUnit: "کلومیٹر",
-        oilChange: "آئل چینج",
         preventiveMaintenance: "پریوینٹو مینٹیننس",
-        inspection: "جنرل انسپیکشن",
         repair: "مرمت",
         driverRequestCard: "ڈرائیور کی درخواست",
         workshopCard: "ورکشاپ تفصیلات",
@@ -609,9 +605,7 @@ export default function MaintenanceDashboard() {
 
   const maintenanceTypes = useMemo(
     () => [
-      { value: "oil_change", label: strings.oilChange },
       { value: "preventive_maintenance", label: strings.preventiveMaintenance },
-      { value: "inspection", label: strings.inspection },
       { value: "repair", label: strings.repair },
     ],
     [strings]
@@ -619,7 +613,8 @@ export default function MaintenanceDashboard() {
 
   const formatTypeLabel = useCallback(
     (value) => {
-      const match = maintenanceTypes.find((option) => option.value === value);
+      const normalized = value === "oil_change" || value === "inspection" ? "repair" : value;
+      const match = maintenanceTypes.find((option) => option.value === normalized);
       return match ? match.label : value || "--";
     },
     [maintenanceTypes]
@@ -639,7 +634,7 @@ export default function MaintenanceDashboard() {
     setHistoryFormData({
       date: toDateInputValue(selectedHistoryRecord.date),
       mileage: selectedHistoryRecord.mileage || "",
-      type: selectedHistoryRecord.type || "",
+      type: selectedHistoryRecord.type === "preventive_maintenance" ? "preventive_maintenance" : "repair",
       workshop: selectedHistoryRecord.workshop || "",
       cost: selectedHistoryRecord.cost || "",
       nextDueDate: toDateInputValue(selectedHistoryRecord.nextDueDate),
@@ -659,7 +654,7 @@ export default function MaintenanceDashboard() {
     setHistoryFormData({
       date: toDateInputValue(record.date),
       mileage: record.mileage || "",
-      type: record.type || "",
+      type: record.type === "preventive_maintenance" ? "preventive_maintenance" : "repair",
       workshop: record.workshop || "",
       cost: record.cost || "",
       nextDueDate: toDateInputValue(record.nextDueDate),
@@ -849,7 +844,9 @@ export default function MaintenanceDashboard() {
       return parts.map((part) => ({
         id: part.id || (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `part-${Math.random()}`),
         name: part.name || "",
+        repTag: part.repTag || "",
         quantity: part.quantity || "",
+        itemCode: part.itemCode || "",
         cost: part.cost || "",
         image: part.image || null,
       }));
@@ -1766,7 +1763,7 @@ export default function MaintenanceDashboard() {
                         </div>
                       )}
 
-                      {(formData.type === "repair" || formData.type === "oil_change") && (
+                      {formData.type === "repair" && (
                         <div>
                           <label className="block text-sm font-medium text-gray-800 mb-2">
                             {strings.uploadFiles}
@@ -1891,16 +1888,12 @@ export default function MaintenanceDashboard() {
                                       )}
                                     </td>
                                     <td className="px-3 py-2">
-                                      {showSpareParts ? (
-                                        <span>{row.repTag || strings.jobCard.noData}</span>
-                                      ) : (
-                                        <input
-                                          type="text"
-                                          value={row.repTag}
-                                          onChange={(event) => handleJobCardRepairChange(row.id, "repTag", event.target.value)}
-                                          className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
-                                        />
-                                      )}
+                                      <input
+                                        type="text"
+                                        value={row.repTag}
+                                        onChange={(event) => handleJobCardRepairChange(row.id, "repTag", event.target.value)}
+                                        className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                                      />
                                     </td>
                                     <td className="px-3 py-2">
                                       {showSpareParts ? (
@@ -1915,16 +1908,12 @@ export default function MaintenanceDashboard() {
                                       )}
                                     </td>
                                     <td className="px-3 py-2">
-                                      {showSpareParts ? (
-                                        <span>{row.itemCode || strings.jobCard.noData}</span>
-                                      ) : (
-                                        <input
-                                          type="text"
-                                          value={row.itemCode}
-                                          onChange={(event) => handleJobCardRepairChange(row.id, "itemCode", event.target.value)}
-                                          className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
-                                        />
-                                      )}
+                                      <input
+                                        type="text"
+                                        value={row.itemCode}
+                                        onChange={(event) => handleJobCardRepairChange(row.id, "itemCode", event.target.value)}
+                                        className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                                      />
                                     </td>
                                     <td className="px-3 py-2">
                                       {showSpareParts ? (
@@ -2465,7 +2454,7 @@ function SparePartRow({ part, strings, isRTL, onChange, onImageChange, onRemove 
 
   return (
     <div className="border border-gray-200 bg-gray-50 rounded-xl p-4 shadow-sm">
-      <div className={`grid grid-cols-1 md:grid-cols-3 gap-3 ${isRTL ? "text-right" : "text-left"}`}>
+      <div className={`grid grid-cols-1 md:grid-cols-5 gap-3 ${isRTL ? "text-right" : "text-left"}`}>
         <input
           type="text"
           value={part.name}
@@ -2474,10 +2463,24 @@ function SparePartRow({ part, strings, isRTL, onChange, onImageChange, onRemove 
           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:outline-none"
         />
         <input
+          type="text"
+          value={part.repTag || ""}
+          onChange={(event) => onChange(part.id, "repTag", event.target.value)}
+          placeholder={strings.jobCard.repTag}
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:outline-none"
+        />
+        <input
           type="number"
           value={part.quantity}
           onChange={(event) => onChange(part.id, "quantity", event.target.value)}
           placeholder={strings.partQuantity}
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:outline-none"
+        />
+        <input
+          type="text"
+          value={part.itemCode || ""}
+          onChange={(event) => onChange(part.id, "itemCode", event.target.value)}
+          placeholder={strings.jobCard.itemCode}
           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:outline-none"
         />
         <input
