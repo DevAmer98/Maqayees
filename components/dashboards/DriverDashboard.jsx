@@ -232,6 +232,7 @@ export default function DriverDashboard() {
   const [recordedStartMileage, setRecordedStartMileage] = useState(null);
   const [formData, setFormData] = useState({ date: "", mileage: "", type: "" });
   const [maintenanceMessage, setMaintenanceMessage] = useState(null);
+  const [maintenanceSubmitting, setMaintenanceSubmitting] = useState(false);
   const [startVehiclePhotos, setStartVehiclePhotos] = useState([]);
   const [endVehiclePhotos, setEndVehiclePhotos] = useState([]);
   const [activeShiftId, setActiveShiftId] = useState(null);
@@ -910,39 +911,60 @@ export default function DriverDashboard() {
     popup.print();
   };
 
-  const handleMaintenanceSubmit = (event) => {
+  const handleMaintenanceSubmit = async (event) => {
     event.preventDefault();
     const { date, mileage, type } = formData;
     if (!date || !mileage || !type) {
       setMaintenanceMessage({ type: "error", text: t[lang].maintenanceMissing });
       return;
     }
-
     const mileageValue = Number(mileage);
     if (Number.isNaN(mileageValue) || mileageValue < 0) {
       setMaintenanceMessage({ type: "error", text: t[lang].maintenanceMissing });
       return;
     }
+    if (!vehicle?.id) {
+      setMaintenanceMessage({ type: "error", text: "You are not assigned to a vehicle. Cannot save maintenance record." });
+      return;
+    }
 
-    const locale = lang === "ar" ? "ar-SA" : lang === "ur" ? "ur-PK" : "en-US";
-    const formattedMileage = `${new Intl.NumberFormat(locale).format(mileageValue)} ${t[lang].kmUnit}`;
-    const typeOption = maintenanceTypes.find((option) => option.value === type);
+    setMaintenanceSubmitting(true);
+    setMaintenanceMessage(null);
+    try {
+      const res = await fetch("/api/maintenance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, mileage: mileageValue, type, vehicleId: vehicle.id }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setMaintenanceMessage({ type: "error", text: data.error || "Failed to save maintenance record." });
+        return;
+      }
 
-    setMaintenanceRecords((prev) => [
-      {
-        id: `mnt-${Date.now()}`,
-        date,
-        typeKey: type,
-        typeLabel: typeOption?.label,
-        mileage: formattedMileage,
-        cost: "N/A",
-        workshop: "N/A",
-      },
-      ...prev,
-    ]);
+      const locale = lang === "ar" ? "ar-SA" : lang === "ur" ? "ur-PK" : "en-US";
+      const formattedMileage = `${new Intl.NumberFormat(locale).format(mileageValue)} ${t[lang].kmUnit}`;
+      const typeOption = maintenanceTypes.find((option) => option.value === type);
 
-    setFormData({ date: "", mileage: "", type: "" });
-    setMaintenanceMessage({ type: "success", text: t[lang].maintenanceSaved });
+      setMaintenanceRecords((prev) => [
+        {
+          id: data.maintenance.id,
+          date,
+          typeKey: type,
+          typeLabel: typeOption?.label,
+          mileage: formattedMileage,
+          cost: "N/A",
+          workshop: "N/A",
+        },
+        ...prev,
+      ]);
+      setFormData({ date: "", mileage: "", type: "" });
+      setMaintenanceMessage({ type: "success", text: t[lang].maintenanceSaved });
+    } catch {
+      setMaintenanceMessage({ type: "error", text: "Network error. Please try again." });
+    } finally {
+      setMaintenanceSubmitting(false);
+    }
   };
 
   const startVehiclePhotoPreviews = useMemo(() => {
@@ -1553,9 +1575,10 @@ export default function DriverDashboard() {
                   <div className="sm:col-span-3 flex justify-end">
                     <button
                       type="submit"
-                      className="bg-black hover:bg-gray-900 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-md transition"
+                      disabled={maintenanceSubmitting}
+                      className="bg-black hover:bg-gray-900 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-md transition disabled:opacity-50"
                     >
-                      {t[lang].submit}
+                      {maintenanceSubmitting ? "Saving..." : t[lang].submit}
                     </button>
                   </div>
                 </form>
