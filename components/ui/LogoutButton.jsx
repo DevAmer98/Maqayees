@@ -1,7 +1,7 @@
 "use client";
 
 import { signOut } from "next-auth/react";
-import { useTransition } from "react";
+import { useState } from "react";
 
 export default function LogoutButton({
   children = "Logout",
@@ -9,15 +9,14 @@ export default function LogoutButton({
   className = "",
   callbackUrl = "/login",
 }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, setIsPending] = useState(false);
 
-  const handleClick = () => {
-    startTransition(() => {
-      const url = callbackUrl.startsWith("http")
-        ? callbackUrl
-        : `${window.location.origin}${callbackUrl}`;
-      signOut({ callbackUrl: url });
-    });
+  const handleClick = async () => {
+    if (isPending) return;
+    setIsPending(true);
+    await signOut({ redirect: false });
+    const path = callbackUrl.startsWith("/") ? callbackUrl : `/${callbackUrl}`;
+    window.location.href = `${window.location.origin}${path}`;
   };
 
   return (
