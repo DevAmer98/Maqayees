@@ -214,3 +214,28 @@ export async function PATCH(request) {
     return NextResponse.json({ success: false, error: "Failed to update maintenance record." }, { status: 500 });
   }
 }
+
+export async function DELETE(request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = String(searchParams.get("id") || "").trim();
+
+    if (!id) {
+      return NextResponse.json({ success: false, error: "Maintenance record id is required." }, { status: 400 });
+    }
+
+    await prisma.$transaction([
+      prisma.maintenanceJobCardSnapshot.deleteMany({
+        where: { requestId: id },
+      }),
+      prisma.maintenance.delete({
+        where: { id },
+      }),
+    ]);
+
+    return NextResponse.json({ success: true }, { status: 200 });
+  } catch (error) {
+    console.error("Failed to delete maintenance record:", error);
+    return NextResponse.json({ success: false, error: "Failed to delete maintenance record." }, { status: 500 });
+  }
+}

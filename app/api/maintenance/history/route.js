@@ -54,9 +54,11 @@ export async function GET() {
       resolvedAt: record.createdAt,
       notes: record.details || "",
       jobCard: null,
+      canModify: true,
     }));
 
-    const snapshotHistory = snapshots.map((snapshot) => {
+    const maintenanceIds = new Set(records.map((record) => record.id));
+    const snapshotHistory = snapshots.filter((snapshot) => !maintenanceIds.has(snapshot.requestId)).map((snapshot) => {
       const info = snapshot.info && typeof snapshot.info === "object" ? snapshot.info : {};
       const vehicleType = String(info.vehicleType || info.model || "").trim();
       const plateNo = String(info.plateNo || "").trim();
@@ -74,6 +76,7 @@ export async function GET() {
         status: "approved",
         resolvedAt: snapshot.updatedAt,
         notes: String(info.workshopDetails || info.complaint || ""),
+        canModify: false,
         jobCard: {
           requestId: snapshot.requestId,
           updatedAt: snapshot.updatedAt,

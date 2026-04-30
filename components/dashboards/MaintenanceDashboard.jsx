@@ -2,6 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import LogoutButton from "@/components/ui/LogoutButton";
 
 const SPARE_PART_TYPES = new Set(["repair", "oil_change"]);
 
@@ -99,6 +100,13 @@ const escapeHtml = (value) => {
     .replace(/'/g, "&#039;");
 };
 
+const toDateInputValue = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 10);
+};
+
 export default function MaintenanceDashboard() {
   const [lang, setLang] = useState("en");
   const [activeTab, setActiveTab] = useState("requests");
@@ -128,6 +136,17 @@ export default function MaintenanceDashboard() {
   const [isHistoryRefreshing, setIsHistoryRefreshing] = useState(false);
   const [history, setHistory] = useState([]);
   const [selectedHistoryId, setSelectedHistoryId] = useState(null);
+  const [editingHistoryId, setEditingHistoryId] = useState(null);
+  const [historyFormData, setHistoryFormData] = useState({
+    date: "",
+    mileage: "",
+    type: "",
+    workshop: "",
+    cost: "",
+    nextDueDate: "",
+    details: "",
+  });
+  const [historyActionMessage, setHistoryActionMessage] = useState(null);
   const [jobCardInfo, setJobCardInfo] = useState(() => buildJobCardDefaults(null));
   const [jobCardRepairs, setJobCardRepairs] = useState([createJobCardRepairRow()]);
   const [jobCardSnapshots, setJobCardSnapshots] = useState({});
@@ -259,6 +278,17 @@ export default function MaintenanceDashboard() {
         validationMissing:
           "Please complete date, mileage, type, workshop, cost, and next service date before approving.",
         emptyRequests: "No maintenance requests awaiting review.",
+        logout: "Logout",
+        actions: "Actions",
+        edit: "Edit",
+        delete: "Delete",
+        cancel: "Cancel",
+        saveChanges: "Save Changes",
+        editHistory: "Edit Record",
+        deleteConfirm: "Delete this maintenance record?",
+        historyEditSaved: "Maintenance record updated.",
+        historyDeleteSaved: "Maintenance record deleted.",
+        historyReadonly: "This history entry is a saved job-card snapshot and cannot be edited here.",
         attachmentNone: "No attachments provided.",
         historyEmpty: "No maintenance history yet.",
         historyResolvedAt: "Resolved",
@@ -368,6 +398,17 @@ export default function MaintenanceDashboard() {
         messageRejected: "تم رفض الطلب.",
         validationMissing: "يرجى استكمال التاريخ والعداد والنوع والورشة والتكلفة وموعد الخدمة التالية قبل الاعتماد.",
         emptyRequests: "لا توجد طلبات صيانة بانتظار المراجعة.",
+        logout: "تسجيل الخروج",
+        actions: "الإجراءات",
+        edit: "تعديل",
+        delete: "حذف",
+        cancel: "إلغاء",
+        saveChanges: "حفظ التغييرات",
+        editHistory: "تعديل السجل",
+        deleteConfirm: "هل تريد حذف سجل الصيانة هذا؟",
+        historyEditSaved: "تم تحديث سجل الصيانة.",
+        historyDeleteSaved: "تم حذف سجل الصيانة.",
+        historyReadonly: "هذا السجل محفوظ كنموذج إصلاح ولا يمكن تعديله هنا.",
         attachmentNone: "لا توجد مرفقات.",
         historyEmpty: "لا يوجد سجل صيانة حتى الآن.",
         historyResolvedAt: "تاريخ الإجراء",
@@ -477,6 +518,17 @@ export default function MaintenanceDashboard() {
         messageRejected: "درخواست مسترد ہو گئی۔",
         validationMissing: "براہ کرم تاریخ، مائلیج، قسم، ورکشاپ، لاگت اور اگلی سروس کی تاریخ مکمل کریں۔",
         emptyRequests: "کوئی درخواستیں زیرِ جائزہ نہیں ہیں۔",
+        logout: "لاگ آؤٹ",
+        actions: "ایکشنز",
+        edit: "ترمیم",
+        delete: "حذف",
+        cancel: "منسوخ",
+        saveChanges: "تبدیلیاں محفوظ کریں",
+        editHistory: "ریکارڈ میں ترمیم",
+        deleteConfirm: "کیا یہ مینٹیننس ریکارڈ حذف کریں؟",
+        historyEditSaved: "مینٹیننس ریکارڈ اپ ڈیٹ ہو گیا۔",
+        historyDeleteSaved: "مینٹیننس ریکارڈ حذف ہو گیا۔",
+        historyReadonly: "یہ محفوظ شدہ جاب کارڈ ریکارڈ ہے، یہاں ترمیم نہیں ہو سکتی۔",
         attachmentNone: "کوئی اٹیچمنٹ نہیں۔",
         historyEmpty: "ابھی تک کوئی مینٹیننس ہسٹری نہیں۔",
         historyResolvedAt: "فیصلہ",
@@ -567,6 +619,91 @@ export default function MaintenanceDashboard() {
     () => history.find((record) => record.id === selectedHistoryId) || null,
     [history, selectedHistoryId]
   );
+
+  useEffect(() => {
+    if (!selectedHistoryRecord || editingHistoryId !== selectedHistoryRecord.id) return;
+    setHistoryFormData({
+      date: toDateInputValue(selectedHistoryRecord.date),
+      mileage: selectedHistoryRecord.mileage || "",
+      type: selectedHistoryRecord.type || "",
+      workshop: selectedHistoryRecord.workshop || "",
+      cost: selectedHistoryRecord.cost || "",
+      nextDueDate: toDateInputValue(selectedHistoryRecord.nextDueDate),
+      details: selectedHistoryRecord.notes || "",
+    });
+  }, [selectedHistoryRecord, editingHistoryId]);
+
+  const startEditingHistory = (record) => {
+    if (!record?.canModify) {
+      setHistoryActionMessage({ type: "warning", text: strings.historyReadonly });
+      return;
+    }
+    setSelectedHistoryId(record.id);
+    setEditingHistoryId(record.id);
+    setHistoryActionMessage(null);
+    setHistoryFormData({
+      date: toDateInputValue(record.date),
+      mileage: record.mileage || "",
+      type: record.type || "",
+      workshop: record.workshop || "",
+      cost: record.cost || "",
+      nextDueDate: toDateInputValue(record.nextDueDate),
+      details: record.notes || "",
+    });
+  };
+
+  const cancelEditingHistory = () => {
+    setEditingHistoryId(null);
+    setHistoryActionMessage(null);
+  };
+
+  const handleHistoryFieldChange = (field, value) => {
+    setHistoryFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleHistoryEditSubmit = async (event) => {
+    event.preventDefault();
+    if (!selectedHistoryRecord?.canModify) return;
+    setIsProcessing(true);
+    setHistoryActionMessage(null);
+    try {
+      await resolveMaintenanceRequestInDb(selectedHistoryRecord.id, "approved", "", historyFormData);
+      await loadHistoryFromDb();
+      setEditingHistoryId(null);
+      setHistoryActionMessage({ type: "success", text: strings.historyEditSaved });
+    } catch (error) {
+      setHistoryActionMessage({ type: "error", text: error?.message || "Failed to update maintenance record." });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleHistoryDelete = async (record) => {
+    if (!record?.canModify) {
+      setHistoryActionMessage({ type: "warning", text: strings.historyReadonly });
+      return;
+    }
+    if (!window.confirm(strings.deleteConfirm)) return;
+    setIsProcessing(true);
+    setHistoryActionMessage(null);
+    try {
+      const response = await fetch(`/api/maintenance?id=${encodeURIComponent(record.id)}`, {
+        method: "DELETE",
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.error || "Failed to delete maintenance record.");
+      }
+      await loadHistoryFromDb();
+      setSelectedHistoryId((prev) => (prev === record.id ? null : prev));
+      setEditingHistoryId(null);
+      setHistoryActionMessage({ type: "success", text: strings.historyDeleteSaved });
+    } catch (error) {
+      setHistoryActionMessage({ type: "error", text: error?.message || "Failed to delete maintenance record." });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   const showSpareParts = SPARE_PART_TYPES.has(formData.type);
 
@@ -1331,6 +1468,13 @@ export default function MaintenanceDashboard() {
             {strings.historyTab}
           </button>
         </nav>
+
+        <LogoutButton
+          className="mt-auto bg-gray-800 hover:bg-gray-700 text-white py-2.5 px-4 rounded-lg font-semibold text-sm shadow-md transition disabled:opacity-70"
+          pendingText={strings.logout}
+        >
+          {strings.logout}
+        </LogoutButton>
       </aside>
 
       <main className="flex-1 p-6 md:p-10 mt-16 md:mt-0">
@@ -1369,6 +1513,12 @@ export default function MaintenanceDashboard() {
                 {strings.historyTab}
               </button>
             </div>
+            <LogoutButton
+              className="bg-gray-800 hover:bg-gray-700 text-white py-2 px-3 rounded-lg text-xs font-semibold transition disabled:opacity-70"
+              pendingText={strings.logout}
+            >
+              {strings.logout}
+            </LogoutButton>
           </div>
         </header>
 
@@ -1855,6 +2005,7 @@ export default function MaintenanceDashboard() {
                         <th className="py-3 px-4 font-medium">{strings.type}</th>
                         <th className="py-3 px-4 font-medium">{strings.status}</th>
                         <th className="py-3 px-4 font-medium">{strings.historyResolvedAt}</th>
+                        <th className="py-3 px-4 font-medium">{strings.actions}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1897,6 +2048,32 @@ export default function MaintenanceDashboard() {
                               dateStyle: "medium",
                               timeStyle: "short",
                             })}</td>
+                            <td className="py-2.5 px-4 whitespace-nowrap">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    startEditingHistory(record);
+                                  }}
+                                  disabled={!record.canModify || isProcessing}
+                                  className="border border-gray-300 hover:border-gray-500 text-gray-700 px-2.5 py-1 rounded-md text-xs font-medium disabled:opacity-40"
+                                >
+                                  {strings.edit}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void handleHistoryDelete(record);
+                                  }}
+                                  disabled={!record.canModify || isProcessing}
+                                  className="border border-red-200 hover:border-red-500 text-red-600 px-2.5 py-1 rounded-md text-xs font-medium disabled:opacity-40"
+                                >
+                                  {strings.delete}
+                                </button>
+                              </div>
+                            </td>
                           </tr>
                         );
                       })}
@@ -1904,27 +2081,132 @@ export default function MaintenanceDashboard() {
                   </table>
                 </div>
 
+                {historyActionMessage && (
+                  <p
+                    className={`text-sm ${
+                      historyActionMessage.type === "success"
+                        ? "text-green-600"
+                        : historyActionMessage.type === "warning"
+                          ? "text-amber-600"
+                          : "text-red-600"
+                    }`}
+                  >
+                    {historyActionMessage.text}
+                  </p>
+                )}
+
                 {selectedHistoryRecord && (
                   <div className="border border-gray-200 rounded-xl p-4 bg-gray-50">
-                    <h3 className="text-sm font-semibold text-black mb-3">{strings.historyDetails}</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      <Field label={strings.driver} value={selectedHistoryRecord.driver || "--"} />
-                      <Field label={strings.vehicle} value={selectedHistoryRecord.vehicle || "--"} />
-                      <Field label={strings.date} value={formatDate(selectedHistoryRecord.date)} />
-                      <Field label={strings.mileage} value={selectedHistoryRecord.mileage || "--"} />
-                      <Field label={strings.type} value={formatTypeLabel(selectedHistoryRecord.type)} />
-                      <Field label={strings.workshop} value={selectedHistoryRecord.workshop || "--"} />
-                      <Field label={strings.cost} value={selectedHistoryRecord.cost || "--"} />
-                      <Field label={strings.nextDue} value={formatDate(selectedHistoryRecord.nextDueDate)} />
-                      <Field
-                        label={strings.historyResolvedAt}
-                        value={formatDate(selectedHistoryRecord.resolvedAt, {
-                          dateStyle: "medium",
-                          timeStyle: "short",
-                        })}
-                      />
-                      <Field label={strings.detailNotes} value={selectedHistoryRecord.notes || "--"} />
+                    <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                      <h3 className="text-sm font-semibold text-black">
+                        {editingHistoryId === selectedHistoryRecord.id ? strings.editHistory : strings.historyDetails}
+                      </h3>
+                      {selectedHistoryRecord.canModify && editingHistoryId !== selectedHistoryRecord.id && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => startEditingHistory(selectedHistoryRecord)}
+                            className="border border-gray-300 hover:border-gray-500 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-medium"
+                          >
+                            {strings.edit}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleHistoryDelete(selectedHistoryRecord)}
+                            className="border border-red-200 hover:border-red-500 text-red-600 px-3 py-1.5 rounded-lg text-xs font-medium"
+                          >
+                            {strings.delete}
+                          </button>
+                        </div>
+                      )}
                     </div>
+
+                    {editingHistoryId === selectedHistoryRecord.id ? (
+                      <form onSubmit={handleHistoryEditSubmit} className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <HistoryEditField
+                            label={strings.date}
+                            type="date"
+                            value={historyFormData.date}
+                            onChange={(value) => handleHistoryFieldChange("date", value)}
+                          />
+                          <HistoryEditField
+                            label={strings.mileage}
+                            type="number"
+                            value={historyFormData.mileage}
+                            onChange={(value) => handleHistoryFieldChange("mileage", value)}
+                          />
+                          <HistorySelectField
+                            label={strings.type}
+                            value={historyFormData.type}
+                            options={maintenanceTypes}
+                            onChange={(value) => handleHistoryFieldChange("type", value)}
+                          />
+                          <HistoryEditField
+                            label={strings.workshop}
+                            value={historyFormData.workshop}
+                            onChange={(value) => handleHistoryFieldChange("workshop", value)}
+                          />
+                          <HistoryEditField
+                            label={strings.cost}
+                            type="number"
+                            value={historyFormData.cost}
+                            onChange={(value) => handleHistoryFieldChange("cost", value)}
+                          />
+                          <HistoryEditField
+                            label={strings.nextDue}
+                            type="date"
+                            value={historyFormData.nextDueDate}
+                            onChange={(value) => handleHistoryFieldChange("nextDueDate", value)}
+                          />
+                          <div className="md:col-span-2">
+                            <label className="block text-xs font-semibold text-gray-500 mb-1">{strings.detailNotes}</label>
+                            <textarea
+                              value={historyFormData.details}
+                              onChange={(event) => handleHistoryFieldChange("details", event.target.value)}
+                              rows={3}
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-black"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="submit"
+                            disabled={isProcessing}
+                            className="bg-black hover:bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+                          >
+                            {strings.saveChanges}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={cancelEditingHistory}
+                            disabled={isProcessing}
+                            className="border border-gray-300 hover:border-gray-500 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                          >
+                            {strings.cancel}
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <Field label={strings.driver} value={selectedHistoryRecord.driver || "--"} />
+                        <Field label={strings.vehicle} value={selectedHistoryRecord.vehicle || "--"} />
+                        <Field label={strings.date} value={formatDate(selectedHistoryRecord.date)} />
+                        <Field label={strings.mileage} value={selectedHistoryRecord.mileage || "--"} />
+                        <Field label={strings.type} value={formatTypeLabel(selectedHistoryRecord.type)} />
+                        <Field label={strings.workshop} value={selectedHistoryRecord.workshop || "--"} />
+                        <Field label={strings.cost} value={selectedHistoryRecord.cost || "--"} />
+                        <Field label={strings.nextDue} value={formatDate(selectedHistoryRecord.nextDueDate)} />
+                        <Field
+                          label={strings.historyResolvedAt}
+                          value={formatDate(selectedHistoryRecord.resolvedAt, {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          })}
+                        />
+                        <Field label={strings.detailNotes} value={selectedHistoryRecord.notes || "--"} />
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1952,6 +2234,39 @@ function Field({ label, value }) {
     <p className="text-sm text-gray-700">
       <span className="font-medium text-black">{label}:</span> {value}
     </p>
+  );
+}
+
+function HistoryEditField({ label, value, onChange, type = "text" }) {
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-gray-500 mb-1">{label}</label>
+      <input
+        type={type}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-black"
+      />
+    </div>
+  );
+}
+
+function HistorySelectField({ label, value, options, onChange }) {
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-gray-500 mb-1">{label}</label>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-black"
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }
 
