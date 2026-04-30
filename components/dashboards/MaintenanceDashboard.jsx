@@ -3,48 +3,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-const initialRequests = [
-  {
-    id: "req-001",
-    driver: "Ahmed Driver",
-    vehicle: "Hilux — ABC-1234",
-    date: "2024-09-14",
-    mileage: "52300",
-    type: "repair",
-    submittedAt: "2024-09-14T09:15:00Z",
-    status: "pending",
-    notes: "Engine oil light turned on during delivery route.",
-    attachments: [{ id: "att-001", name: "odometer.jpg" }],
-  },
-  {
-    id: "req-002",
-    driver: "Omar Khalid",
-    vehicle: "Isuzu D-Max — XYZ-5678",
-    date: "2024-09-12",
-    mileage: "68740",
-    type: "preventive_maintenance",
-    submittedAt: "2024-09-12T17:45:00Z",
-    status: "pending",
-    notes: "Scheduled preventive maintenance requested per service plan.",
-    attachments: [],
-  },
-  {
-    id: "req-003",
-    driver: "Ali Hassan",
-    vehicle: "Hino 300 — LMN-9101",
-    date: "2024-08-20",
-    mileage: "84210",
-    type: "inspection",
-    submittedAt: "2024-08-20T08:30:00Z",
-    status: "approved",
-    workshop: "Hino Service Center",
-    cost: "950",
-    nextDueDate: "2024-11-20",
-    resolvedAt: "2024-08-21T10:00:00Z",
-    notes: "Brake inspection completed and pads replaced.",
-  },
-];
-
 const SPARE_PART_TYPES = new Set(["repair", "oil_change"]);
 
 const createEmptyPart = () => ({
@@ -144,7 +102,7 @@ const escapeHtml = (value) => {
 export default function MaintenanceDashboard() {
   const [lang, setLang] = useState("en");
   const [activeTab, setActiveTab] = useState("requests");
-  const [requests, setRequests] = useState(initialRequests);
+  const [requests, setRequests] = useState([]);
   const initialSelectedId = useMemo(
     () => requests.find((req) => req.status === "pending")?.id ?? null,
     [requests]
@@ -165,6 +123,8 @@ export default function MaintenanceDashboard() {
   const [decisionNote, setDecisionNote] = useState("");
   const [statusMessage, setStatusMessage] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isRequestsLoading, setIsRequestsLoading] = useState(true);
+  const [requestLoadError, setRequestLoadError] = useState("");
   const [isHistoryRefreshing, setIsHistoryRefreshing] = useState(false);
   const [history, setHistory] = useState([]);
   const [selectedHistoryId, setSelectedHistoryId] = useState(null);
@@ -174,7 +134,7 @@ export default function MaintenanceDashboard() {
 
   useEffect(() => {
     setSelectedRequestId((prev) => {
-      if (prev) return prev;
+      if (prev && requests.some((req) => req.id === prev && req.status === "pending")) return prev;
       return requests.find((req) => req.status === "pending")?.id ?? null;
     });
   }, [requests]);
@@ -196,18 +156,28 @@ export default function MaintenanceDashboard() {
   }, []);
 
   const loadRequestsFromDb = useCallback(async () => {
+    setIsRequestsLoading(true);
+    setRequestLoadError("");
     try {
       const response = await fetch("/api/maintenance?status=pending", {
         method: "GET",
         cache: "no-store",
       });
       const data = await response.json().catch(() => null);
-      if (!response.ok || !data?.success || !Array.isArray(data.requests)) return false;
+      if (!response.ok || !data?.success || !Array.isArray(data.requests)) {
+        setRequests([]);
+        setRequestLoadError(data?.error || "Failed to load maintenance requests.");
+        return false;
+      }
       setRequests(data.requests);
       return true;
     } catch (error) {
       console.error("Failed to fetch maintenance requests:", error);
+      setRequests([]);
+      setRequestLoadError("Failed to load maintenance requests.");
       return false;
+    } finally {
+      setIsRequestsLoading(false);
     }
   }, []);
 
@@ -1088,7 +1058,7 @@ export default function MaintenanceDashboard() {
     return data.maintenance;
   }, []);
 
-  const resolveMaintenanceRequestInDb = useCallback(async (requestId, nextStatus, note) => {
+  const resolveMaintenanceRequestInDb = useCallback(async (requestId, nextStatus, note, workshopData = {}) => {
     const response = await fetch("/api/maintenance", {
       method: "PATCH",
       headers: {
@@ -1098,13 +1068,20 @@ export default function MaintenanceDashboard() {
         requestId,
         status: nextStatus,
         decisionNote: note,
+        date: workshopData.date,
+        mileage: workshopData.mileage,
+        type: workshopData.type,
+        workshop: workshopData.workshop,
+        details: workshopData.details,
+        cost: workshopData.cost,
+        nextDueDate: workshopData.nextDueDate,
       }),
     });
     const data = await response.json().catch(() => null);
     if (!response.ok || !data?.success) {
       throw new Error(data?.error || "Failed to update maintenance request.");
     }
-    return data.request;
+    return data.maintenance;
   }, []);
 
   useEffect(() => {
@@ -1217,7 +1194,11 @@ export default function MaintenanceDashboard() {
         return;
       }
       try {
-        await createMaintenanceRecordInDb(selectedRequest, formData);
+        if (selectedRequest.vehicleId) {
+          await resolveMaintenanceRequestInDb(selectedRequest.id, "approved", decisionNote, formData);
+        } else {
+          await createMaintenanceRecordInDb(selectedRequest, formData);
+        }
       } catch (error) {
         console.error("Failed to persist maintenance record:", error);
         setStatusMessage({
@@ -1231,7 +1212,7 @@ export default function MaintenanceDashboard() {
     const resolvedAt = new Date().toISOString();
     const nextStatus = decision === "approve" ? "approved" : "rejected";
 
-    if (selectedRequest.vehicleId) {
+    if (decision === "reject" && selectedRequest.vehicleId) {
       try {
         await resolveMaintenanceRequestInDb(selectedRequest.id, nextStatus, decisionNote);
       } catch (error) {
@@ -1394,7 +1375,11 @@ export default function MaintenanceDashboard() {
         {activeTab === "requests" && (
           <div className="grid grid-cols-1 xl:grid-cols-[320px,1fr] gap-6">
             <Card title={strings.pendingRequests}>
-              {requests.length === 0 || requests.every((req) => req.status !== "pending") ? (
+              {isRequestsLoading ? (
+                <p className="text-sm text-gray-500">Loading maintenance requests...</p>
+              ) : requestLoadError ? (
+                <p className="text-sm text-red-600">{requestLoadError}</p>
+              ) : requests.length === 0 || requests.every((req) => req.status !== "pending") ? (
                 <p className="text-sm text-gray-500">{strings.emptyRequests}</p>
               ) : (
                 <ul className="space-y-3 max-h-[28rem] overflow-y-auto pr-1">

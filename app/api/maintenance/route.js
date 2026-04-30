@@ -15,21 +15,21 @@ function formatVehicleLabel(vehicle) {
   return `${vehicle.brand} ${vehicle.model} — ${vehicle.plateNumber}`;
 }
 
-function serializeMaintenanceRequest(request) {
+function serializeMaintenanceRecordAsRequest(record) {
   return {
-    id: request.id,
-    vehicleId: request.vehicleId,
-    driverId: request.driverId || "",
-    driver: request.driverName || request.vehicle?.driverName || "--",
-    vehicle: formatVehicleLabel(request.vehicle),
-    date: request.date.toISOString().slice(0, 10),
-    mileage: String(request.mileage ?? ""),
-    type: request.type,
-    submittedAt: request.submittedAt,
-    status: request.status,
-    resolvedAt: request.resolvedAt || null,
-    decisionNote: request.decisionNote || "",
-    notes: request.notes || "",
+    id: record.id,
+    vehicleId: record.vehicleId,
+    driverId: record.vehicle?.driverId || "",
+    driver: record.vehicle?.driverName || record.vehicle?.driver?.name || "--",
+    vehicle: formatVehicleLabel(record.vehicle),
+    date: record.date.toISOString().slice(0, 10),
+    mileage: String(record.mileage ?? ""),
+    type: record.type,
+    submittedAt: record.createdAt,
+    status: record.workshop || record.cost != null || record.nextDueDate ? "approved" : "pending",
+    resolvedAt: record.workshop || record.cost != null || record.nextDueDate ? record.createdAt : null,
+    decisionNote: "",
+    notes: record.details || "",
     attachments: [],
   };
 }
@@ -44,26 +44,43 @@ export async function GET(request) {
       return NextResponse.json({ success: false, error: "Invalid request status." }, { status: 400 });
     }
 
-    const requests = await prisma.maintenanceRequest.findMany({
-      where: status === "all" ? undefined : { status },
-      orderBy: { submittedAt: "desc" },
+    const where =
+      status === "pending"
+        ? {
+            workshop: null,
+            cost: null,
+            nextDueDate: null,
+          }
+        : status === "approved"
+          ? {
+              OR: [{ workshop: { not: null } }, { cost: { not: null } }, { nextDueDate: { not: null } }],
+            }
+          : status === "rejected"
+            ? { id: "__no_rejected_maintenance_records__" }
+            : undefined;
+
+    const records = await prisma.maintenance.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
       include: {
         vehicle: {
           select: {
-            id: true,
+            driverId: true,
             plateNumber: true,
             brand: true,
             model: true,
             driverName: true,
+            driver: {
+              select: {
+                name: true,
+              },
+            },
           },
         },
       },
     });
 
-    return NextResponse.json(
-      { success: true, requests: requests.map(serializeMaintenanceRequest) },
-      { status: 200 }
-    );
+    return NextResponse.json({ success: true, requests: records.map(serializeMaintenanceRecordAsRequest) }, { status: 200 });
   } catch (error) {
     console.error("Failed to load maintenance requests:", error);
     return NextResponse.json({ success: false, error: "Failed to load maintenance requests." }, { status: 500 });
@@ -137,38 +154,6 @@ export async function POST(request) {
 
     const nextDueDate = body?.nextDueDate ? new Date(body.nextDueDate) : null;
     const nextDue = nextDueDate && !Number.isNaN(nextDueDate.getTime()) ? nextDueDate : null;
-    const shouldCreateFinalRecord = Boolean(body?.workshop || body?.cost || body?.nextDueDate || body?.complete === true);
-
-    if (!shouldCreateFinalRecord) {
-      const createdRequest = await prisma.maintenanceRequest.create({
-        data: {
-          vehicleId: vehicle.id,
-          driverId: vehicle.driverId || null,
-          driverName: vehicle.driverName || null,
-          type,
-          date,
-          mileage: Math.round(mileage),
-          notes: body?.details || body?.notes ? String(body.details || body.notes) : null,
-        },
-        include: {
-          vehicle: {
-            select: {
-              id: true,
-              plateNumber: true,
-              brand: true,
-              model: true,
-              driverName: true,
-            },
-          },
-        },
-      });
-
-      return NextResponse.json(
-        { success: true, request: serializeMaintenanceRequest(createdRequest) },
-        { status: 201 }
-      );
-    }
-
     const created = await prisma.maintenance.create({
       data: {
         vehicleId: vehicle.id,
@@ -196,35 +181,36 @@ export async function PATCH(request) {
     const status = String(body?.status || "").trim().toLowerCase();
 
     if (!requestId) {
-      return NextResponse.json({ success: false, error: "Request id is required." }, { status: 400 });
+      return NextResponse.json({ success: false, error: "Maintenance record id is required." }, { status: 400 });
     }
     if (!["approved", "rejected"].includes(status)) {
       return NextResponse.json({ success: false, error: "Valid status is required." }, { status: 400 });
     }
 
-    const updated = await prisma.maintenanceRequest.update({
+    const updateData =
+      status === "approved"
+        ? {
+            type: body?.type ? String(body.type) : undefined,
+            date: body?.date ? new Date(body.date) : undefined,
+            mileage: body?.mileage != null && body.mileage !== "" ? Math.round(Number(body.mileage)) : undefined,
+            workshop: body?.workshop ? String(body.workshop) : "Completed",
+            cost: body?.cost != null && body.cost !== "" ? Number(body.cost) : null,
+            details: body?.details ? String(body.details) : null,
+            nextDueDate: body?.nextDueDate ? new Date(body.nextDueDate) : null,
+          }
+        : {
+            workshop: "Rejected",
+            details: body?.decisionNote ? `Rejected: ${String(body.decisionNote)}` : "Rejected by maintenance.",
+          };
+
+    const updated = await prisma.maintenance.update({
       where: { id: requestId },
-      data: {
-        status,
-        decisionNote: body?.decisionNote ? String(body.decisionNote) : null,
-        resolvedAt: new Date(),
-      },
-      include: {
-        vehicle: {
-          select: {
-            id: true,
-            plateNumber: true,
-            brand: true,
-            model: true,
-            driverName: true,
-          },
-        },
-      },
+      data: updateData,
     });
 
-    return NextResponse.json({ success: true, request: serializeMaintenanceRequest(updated) }, { status: 200 });
+    return NextResponse.json({ success: true, maintenance: updated }, { status: 200 });
   } catch (error) {
-    console.error("Failed to update maintenance request:", error);
-    return NextResponse.json({ success: false, error: "Failed to update maintenance request." }, { status: 500 });
+    console.error("Failed to update maintenance record:", error);
+    return NextResponse.json({ success: false, error: "Failed to update maintenance record." }, { status: 500 });
   }
 }
