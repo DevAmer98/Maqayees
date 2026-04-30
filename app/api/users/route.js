@@ -3,8 +3,10 @@ import bcrypt from "bcrypt";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import path from "path";
+import os from "os";
 import { promises as fs } from "fs";
 import { randomUUID } from "crypto";
+import { uploadToSynology, hasSynologyConfig } from "@/lib/synology";
 
 const allowedRoles = new Set(["admin", "manager", "project_manager", "supervisor", "driver", "maintenance"]);
 const licenseUploadRoot = path.join(process.cwd(), "public", "uploads", "users", "licenses");
@@ -31,7 +33,7 @@ const generateTempPassword = () => {
   return `Maq@${random}${timestamp}`;
 };
 
-async function persistLicensePhoto(file) {
+async function persistLicensePhoto(file, driverName) {
   if (!file || !(file instanceof File) || !file.size) return null;
   if (file.size > MAX_LICENSE_BYTES) {
     throw new Error("Driving license photo must be smaller than 5MB.");
@@ -41,6 +43,23 @@ async function persistLicensePhoto(file) {
   }
   const buffer = Buffer.from(await file.arrayBuffer());
   const ext = path.extname(file.name || "") || ".jpg";
+
+  if (hasSynologyConfig()) {
+    let tempPath;
+    try {
+      const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "maq-license-"));
+      tempPath = path.join(tempDir, `license${ext}`);
+      await fs.writeFile(tempPath, buffer);
+      const driverFolder = (driverName || "unknown").trim().replace(/[^a-zA-Z0-9_-]/g, "_") || "unknown";
+      const remotePath = `maqayees/${driverFolder}/profile/license${ext}`;
+      return await uploadToSynology(tempPath, remotePath);
+    } catch {
+      // fall through to local storage
+    } finally {
+      if (tempPath) await fs.unlink(tempPath).catch(() => {});
+    }
+  }
+
   const folder = randomUUID();
   const destinationDir = path.join(licenseUploadRoot, folder);
   await fs.mkdir(destinationDir, { recursive: true });
@@ -100,7 +119,7 @@ export async function POST(req) {
 
   if (licenseFile) {
     try {
-      drivingLicensePhoto = await persistLicensePhoto(licenseFile);
+      drivingLicensePhoto = await persistLicensePhoto(licenseFile, name);
     } catch (error) {
       return NextResponse.json({ success: false, error: error.message || "Failed to store driving license photo." }, { status: 400 });
     }
