@@ -129,6 +129,10 @@ export async function POST(req) {
       return NextResponse.json({ success: false, error: "shiftId is required to close a shift." }, { status: 400 });
     }
 
+    if (eventTypeRaw === "start" && !payload.vehicleId) {
+      return NextResponse.json({ success: false, error: "You are not assigned to a truck. Please contact your supervisor before starting a shift." }, { status: 400 });
+    }
+
     if (!payload.uploads) {
       return NextResponse.json({ success: false, error: "Uploaded file metadata is required." }, { status: 400 });
     }

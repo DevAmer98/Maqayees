@@ -378,6 +378,7 @@ export default function DriverDashboard() {
       endVehiclePhotoRequired: "Please upload exactly 4 vehicle images before ending.",
       endLowerThanStart: "Ending mileage cannot be lower than starting mileage.",
       noActiveShift: "Active shift not found. Please start a shift first.",
+      noVehicleAssigned: "You are not assigned to a truck. Please contact your supervisor before starting a shift.",
     },
     ar: {
       dashboard: "لوحة السائق",
@@ -466,6 +467,7 @@ export default function DriverDashboard() {
       endVehiclePhotoRequired: "يرجى تحميل 4 صور للمركبة قبل الإنهاء.",
       endLowerThanStart: "لا يمكن أن تكون قراءة العداد النهائية أقل من قراءة البداية.",
       noActiveShift: "لم يتم العثور على مناوبة نشطة. يرجى بدء المناوبة أولاً.",
+      noVehicleAssigned: "لم يتم تعيين مركبة لك. يرجى التواصل مع المشرف قبل بدء المناوبة.",
     },
     ur: {
       dashboard: "ڈرائیور ڈیش بورڈ",
@@ -554,6 +556,7 @@ export default function DriverDashboard() {
       endVehiclePhotoRequired: "براہ کرم ڈیوٹی ختم کرنے سے پہلے گاڑی کی 4 تصاویر اپ لوڈ کریں۔",
       endLowerThanStart: "اختتامی مائلیج ابتدائی مائلیج سے کم نہیں ہو سکتی۔",
       noActiveShift: "فعال شفٹ نہیں ملی۔ براہ کرم پہلے شفٹ شروع کریں۔",
+      noVehicleAssigned: "آپ کو کوئی گاڑی تفویض نہیں کی گئی۔ شفٹ شروع کرنے سے پہلے اپنے سپروائزر سے رابطہ کریں۔",
     },
   };
 
@@ -998,6 +1001,10 @@ export default function DriverDashboard() {
     if (startSubmitting) return;
     if (!driver) {
       setStartError("Driver information is unavailable. Please refresh.");
+      return;
+    }
+    if (!vehicle) {
+      setStartError(t[lang].noVehicleAssigned);
       return;
     }
     if (!startMileage) {
