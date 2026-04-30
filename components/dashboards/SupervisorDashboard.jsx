@@ -19,6 +19,133 @@ import {
 } from "recharts";
 import LogoutButton from "@/components/ui/LogoutButton";
 
+const WALKAROUND_ITEMS = {
+  before: [
+    { id: "before-1", number: 1, label: "Check Engine & Hyd. Oil level", secondary: "آئل اور ہائیڈرولک آئل کی سطح چیک کریں" },
+    { id: "before-2", number: 2, label: "Check Coolant level", secondary: "کولنٹ کی سطح چیک کریں" },
+    { id: "before-3", number: 3, label: "Check AdBlue level", secondary: "ایڈ بلو کی سطح چیک کریں" },
+    { id: "before-4", number: 4, label: "Check for missing tanks caps", secondary: "ٹینک کے ڈھکن چیک کریں" },
+    { id: "before-5", number: 5, label: "Check for any leak", secondary: "کسی بھی لیک کے لیے چیک کریں" },
+    { id: "before-6", number: 6, label: "Check all the lights", secondary: "تمام لائٹس چیک کریں" },
+    { id: "before-7", number: 7, label: "Check vehicle structure & suspension cracks & loose bolts", secondary: "گاڑی کی ساخت اور سسپنشن میں دراڑیں اور ڈھیلے بولٹ چیک کریں" },
+    { id: "before-8", number: 8, label: "Check for loose wiring", secondary: "ڈھیلی وائرنگ چیک کریں" },
+    { id: "before-9", number: 9, label: "Check all the tires & bolts", secondary: "تمام ٹائروں اور بولٹ کو چیک کریں" },
+  ],
+  after: [
+    { id: "after-10", number: 10, label: "Check the fuel level", secondary: "ایندھن کی سطح چیک کریں" },
+    { id: "after-11", number: 11, label: "Check the dashboard warning lights", secondary: "ڈیش بورڈ وارننگ لائٹس چیک کریں" },
+    { id: "after-12", number: 12, label: "Check the mirror, wiper, and windshield glass", secondary: "شیشہ، وائپر اور ونڈ اسکرین چیک کریں" },
+    { id: "after-13", number: 13, label: "Check the seat belt function", secondary: "سیٹ بیلٹ کی فعالیت چیک کریں" },
+    { id: "after-14", number: 14, label: "Check the horn", secondary: "ہارن چیک کریں" },
+    { id: "after-15", number: 15, label: "Check the air brake pressure", secondary: "ایئر بریک پریشر چیک کریں" },
+    { id: "after-16", number: 16, label: "Test the brake performance", secondary: "بریک کی کارکردگی چیک کریں" },
+    { id: "after-17", number: 17, label: "Test the steering performance", secondary: "اسٹیئرنگ کی کارکردگی چیک کریں" },
+    { id: "after-18", number: 18, label: "Check for excessive exhaust smoke", secondary: "ایگزاسٹ کے دھوئیں کو چیک کریں" },
+    { id: "after-19", number: 19, label: "Check the availability of the first-aid kit & fire extinguisher", secondary: "فرسٹ ایڈ اور فائر بجھانے کا آلہ چیک کریں" },
+  ],
+};
+
+const escapeHtml = (value) => {
+  if (!value) return "";
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+};
+
+const formatChecklistDateTime = (value) => {
+  if (!value) return "—";
+  return value.replace("T", " ");
+};
+
+function openChecklistPdf(driverName, checklist) {
+  if (typeof window === "undefined") return;
+  const popup = window.open("", "checklistWindow", "width=900,height=1200");
+  if (!popup) return;
+  popup.opener = null;
+
+  const record = checklist?.record || {};
+  const info = record.checklistInfo || {};
+  const checks = record.walkaroundChecks || {};
+
+  const shiftLabel = info.shift === "day" ? "Day Shift" : info.shift === "night" ? "Night Shift" : "—";
+
+  const infoRows = [
+    ["Driver ID", info.driverId || "—"],
+    ["Driver Name", info.driverName || driverName || "—"],
+    ["Plate No", info.plateNo || "—"],
+    ["Shift", shiftLabel],
+    ["Date & Time", formatChecklistDateTime(info.checklistDateTime)],
+    ["Current Mileage", info.currentMileage || "—"],
+  ];
+
+  const infoTableRows = infoRows
+    .map(([label, value]) => `<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(value)}</td></tr>`)
+    .join("");
+
+  const buildSection = (title, items) => `
+    <h3>${escapeHtml(title)}</h3>
+    <table class="items">
+      <thead><tr><th>#</th><th>Inspection Item</th><th>Status</th></tr></thead>
+      <tbody>
+        ${items.map((item) => `
+          <tr>
+            <td>${item.number}</td>
+            <td>
+              <div>${escapeHtml(item.label)}</div>
+              ${item.secondary ? `<div class="secondary">${escapeHtml(item.secondary)}</div>` : ""}
+            </td>
+            <td class="status">${checks[item.id] ? "☑" : "☐"}</td>
+          </tr>`).join("")}
+      </tbody>
+    </table>`;
+
+  popup.document.write(`<!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Daily Vehicle Walkaround Checklist — ${escapeHtml(driverName)}</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 32px; color: #111; }
+          h1 { font-size: 24px; margin-bottom: 4px; }
+          h3 { font-size: 16px; margin: 20px 0 8px; }
+          table { width: 100%; border-collapse: collapse; }
+          table.meta tr td:first-child { width: 35%; font-weight: 600; }
+          table.meta td { border: 1px solid #e5e7eb; padding: 6px 10px; font-size: 13px; }
+          table.items th { text-align: left; background: #f3f4f6; font-size: 12px; }
+          table.items th, table.items td { border: 1px solid #e5e7eb; padding: 6px 8px; }
+          table.items td.status { text-align: center; font-size: 18px; }
+          table.items td div.secondary { font-size: 11px; color: #6b7280; margin-top: 4px; }
+          .note { border: 1px solid #e5e7eb; padding: 12px; min-height: 80px; margin-top: 24px; }
+          .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 24px; }
+          .signature { border-top: 1px solid #111; padding-top: 8px; font-size: 13px; }
+          .footer { margin-top: 32px; font-size: 12px; color: #6b7280; }
+        </style>
+      </head>
+      <body>
+        <h1>Daily Vehicle Walkaround Checklist</h1>
+        <p>Check each inspection item before moving.</p>
+        <table class="meta">${infoTableRows}</table>
+        ${buildSection("Before Engine Start", WALKAROUND_ITEMS.before)}
+        ${buildSection("After Engine Start", WALKAROUND_ITEMS.after)}
+        <div class="note">
+          <strong>Pre-Trip Defects</strong>
+          <p>${escapeHtml(info.preTripDefects || "—")}</p>
+        </div>
+        <div class="signatures">
+          <div class="signature">Dispatcher Signature<br/>${escapeHtml(info.dispatcher || "—")}</div>
+          <div class="signature">Driver Signature<br/>${escapeHtml(info.driverSignature || "—")}</div>
+        </div>
+        <p class="footer">Generated: ${escapeHtml(new Date().toLocaleString())} &nbsp;|&nbsp; Checklist Date: ${escapeHtml(new Date(checklist.updatedAt).toLocaleString())}</p>
+      </body>
+    </html>`);
+  popup.document.close();
+  popup.focus();
+  popup.print();
+}
+
 export default function SupervisorDashboard() {
   const [activeTab, setActiveTab] = useState("monitor");
   const [selectedTruck, setSelectedTruck] = useState("all");
@@ -1140,13 +1267,14 @@ function MonitorTab({
         Active Drivers
       </h3>
       <div className="overflow-x-auto rounded-lg border border-gray-200">
-        <table className="min-w-[640px] w-full text-sm text-left text-gray-800">
+        <table className="min-w-[800px] w-full text-sm text-left text-gray-800">
           <thead className="bg-gray-100 text-gray-900">
             <tr>
               <th className="py-3 px-4 font-medium">Driver</th>
               <th className="py-3 px-4 font-medium">Truck</th>
               <th className="py-3 px-4 font-medium">Status</th>
               <th className="py-3 px-4 font-medium">Last Update</th>
+              <th className="py-3 px-4 font-medium">Checklist</th>
             </tr>
           </thead>
           <tbody>
@@ -1167,11 +1295,29 @@ function MonitorTab({
                       ? new Date(driver.lastUpdate).toLocaleString()
                       : "—"}
                   </td>
+                  <td className="py-2.5 px-4">
+                    {driver.checklist ? (
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-xs text-gray-500">
+                          {new Date(driver.checklist.updatedAt).toLocaleDateString()}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => openChecklistPdf(driver.name, driver.checklist)}
+                          className="text-xs text-blue-600 hover:underline text-left"
+                        >
+                          View PDF
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-gray-400 text-xs">—</span>
+                    )}
+                  </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td className="py-4 px-4 text-gray-500 text-sm" colSpan={4}>
+                <td className="py-4 px-4 text-gray-500 text-sm" colSpan={5}>
                   No active driver data found.
                 </td>
               </tr>

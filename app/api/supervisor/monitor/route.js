@@ -48,7 +48,7 @@ export async function GET(req) {
     const weekEnd = new Date(weekBuckets[weekBuckets.length - 1].dayKey);
     weekEnd.setHours(23, 59, 59, 999);
 
-    const [drivers, vehicles, activeShifts, fuelLogs] = await Promise.all([
+    const [drivers, vehicles, activeShifts, fuelLogs, checklists] = await Promise.all([
       prisma.user.findMany({
         where: { role: "driver" },
         orderBy: { name: "asc" },
@@ -91,7 +91,24 @@ export async function GET(req) {
           fuelRefilledLiters: true,
         },
       }),
+      prisma.driverChecklist.findMany({
+        orderBy: { updatedAt: "desc" },
+        select: {
+          driverId: true,
+          vehiclePlate: true,
+          shiftId: true,
+          record: true,
+          updatedAt: true,
+        },
+      }),
     ]);
+
+    const checklistByDriverId = new Map();
+    checklists.forEach((checklist) => {
+      if (!checklistByDriverId.has(checklist.driverId)) {
+        checklistByDriverId.set(checklist.driverId, checklist);
+      }
+    });
 
     const vehicleByDriverId = new Map();
     const vehicleByDriverName = new Map();
@@ -132,12 +149,17 @@ export async function GET(req) {
         shift?.vehiclePlate ||
         (assignedVehicle ? `${assignedVehicle.model} - ${assignedVehicle.plateNumber}` : "Unassigned");
 
+      const latestChecklist = checklistByDriverId.get(driver.id) || null;
+
       return {
         id: driver.id,
         name: driver.name,
         truck: truckLabel,
         status: shift ? "On Duty" : "Off Duty",
         lastUpdate: formatLastUpdate(shift?.updatedAt),
+        checklist: latestChecklist
+          ? { updatedAt: latestChecklist.updatedAt.toISOString(), record: latestChecklist.record }
+          : null,
       };
     });
 
