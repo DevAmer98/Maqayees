@@ -38,24 +38,36 @@ export async function GET() {
       }),
     ]);
 
-    const maintenanceHistory = records.map((record) => ({
-      id: record.id,
-      driver: record.vehicle?.driverName || "--",
-      vehicle: record.vehicle
-        ? `${record.vehicle.brand} ${record.vehicle.model} — ${record.vehicle.plateNumber}`
-        : "--",
-      date: record.date,
-      mileage: String(record.mileage ?? ""),
-      type: normalizeType(record.type),
-      workshop: record.workshop || "",
-      cost: record.cost != null ? String(record.cost) : "",
-      nextDueDate: record.nextDueDate || "",
-      status: "approved",
-      resolvedAt: record.createdAt,
-      notes: record.details || "",
-      jobCard: null,
-      canModify: true,
-    }));
+    const snapshotsByRequestId = new Map(snapshots.map((snapshot) => [snapshot.requestId, snapshot]));
+    const maintenanceHistory = records.map((record) => {
+      const snapshot = snapshotsByRequestId.get(record.id);
+      const info = snapshot?.info && typeof snapshot.info === "object" ? snapshot.info : {};
+      return {
+        id: record.id,
+        driver: record.vehicle?.driverName || "--",
+        vehicle: record.vehicle
+          ? `${record.vehicle.brand} ${record.vehicle.model} — ${record.vehicle.plateNumber}`
+          : "--",
+        date: record.date,
+        mileage: String(record.mileage ?? ""),
+        type: normalizeType(record.type),
+        workshop: record.workshop || "",
+        cost: record.cost != null ? String(record.cost) : "",
+        nextDueDate: record.nextDueDate || "",
+        status: "approved",
+        resolvedAt: record.createdAt,
+        notes: record.details || "",
+        jobCard: snapshot
+          ? {
+              requestId: snapshot.requestId,
+              updatedAt: snapshot.updatedAt,
+              info,
+              repairs: Array.isArray(snapshot.repairs) ? snapshot.repairs : [],
+            }
+          : null,
+        canModify: true,
+      };
+    });
 
     const maintenanceIds = new Set(records.map((record) => record.id));
     const snapshotHistory = snapshots.filter((snapshot) => !maintenanceIds.has(snapshot.requestId)).map((snapshot) => {

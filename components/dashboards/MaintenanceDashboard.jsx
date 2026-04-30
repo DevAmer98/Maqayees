@@ -107,6 +107,19 @@ const toDateInputValue = (value) => {
   return date.toISOString().slice(0, 10);
 };
 
+const normalizeRepairRows = (rows) => {
+  const source = Array.isArray(rows) && rows.length ? rows : [createJobCardRepairRow()];
+  return source.map((row) => ({
+    id: row.id || (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `repair-${Math.random()}`),
+    service: row.service || "",
+    repTag: row.repTag || "",
+    qty: row.qty || "",
+    itemCode: row.itemCode || "",
+    unitPrice: row.unitPrice || "",
+    totalPrice: row.totalPrice || "",
+  }));
+};
+
 export default function MaintenanceDashboard() {
   const [lang, setLang] = useState("en");
   const [activeTab, setActiveTab] = useState("requests");
@@ -146,6 +159,7 @@ export default function MaintenanceDashboard() {
     nextDueDate: "",
     details: "",
   });
+  const [historyRepairs, setHistoryRepairs] = useState([createJobCardRepairRow()]);
   const [historyActionMessage, setHistoryActionMessage] = useState(null);
   const [jobCardInfo, setJobCardInfo] = useState(() => buildJobCardDefaults(null));
   const [jobCardRepairs, setJobCardRepairs] = useState([createJobCardRepairRow()]);
@@ -631,6 +645,7 @@ export default function MaintenanceDashboard() {
       nextDueDate: toDateInputValue(selectedHistoryRecord.nextDueDate),
       details: selectedHistoryRecord.notes || "",
     });
+    setHistoryRepairs(normalizeRepairRows(selectedHistoryRecord.jobCard?.repairs));
   }, [selectedHistoryRecord, editingHistoryId]);
 
   const startEditingHistory = (record) => {
@@ -650,6 +665,7 @@ export default function MaintenanceDashboard() {
       nextDueDate: toDateInputValue(record.nextDueDate),
       details: record.notes || "",
     });
+    setHistoryRepairs(normalizeRepairRows(record.jobCard?.repairs));
   };
 
   const cancelEditingHistory = () => {
@@ -661,6 +677,18 @@ export default function MaintenanceDashboard() {
     setHistoryFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  const handleHistoryRepairChange = (id, field, value) => {
+    setHistoryRepairs((prev) => prev.map((row) => (row.id === id ? { ...row, [field]: value } : row)));
+  };
+
+  const addHistoryRepairRow = () => {
+    setHistoryRepairs((prev) => [...prev, createJobCardRepairRow()]);
+  };
+
+  const removeHistoryRepairRow = (id) => {
+    setHistoryRepairs((prev) => (prev.length > 1 ? prev.filter((row) => row.id !== id) : prev));
+  };
+
   const handleHistoryEditSubmit = async (event) => {
     event.preventDefault();
     if (!selectedHistoryRecord?.canModify) return;
@@ -668,6 +696,22 @@ export default function MaintenanceDashboard() {
     setHistoryActionMessage(null);
     try {
       await resolveMaintenanceRequestInDb(selectedHistoryRecord.id, "approved", "", historyFormData);
+      const existingInfo = selectedHistoryRecord.jobCard?.info && typeof selectedHistoryRecord.jobCard.info === "object"
+        ? selectedHistoryRecord.jobCard.info
+        : {};
+      await saveJobCardSnapshotToDb(selectedHistoryRecord.id, {
+        info: {
+          ...existingInfo,
+          workshopDate: historyFormData.date || "",
+          workshopMileage: historyFormData.mileage ? `${historyFormData.mileage} ${strings.kmUnit}` : "",
+          workshopType: formatTypeLabel(historyFormData.type),
+          workshopName: historyFormData.workshop || "",
+          workshopCost: historyFormData.cost || "",
+          workshopNextDueDate: historyFormData.nextDueDate || "",
+          workshopDetails: historyFormData.details || "",
+        },
+        repairs: historyRepairs.map((row) => ({ ...row })),
+      });
       await loadHistoryFromDb();
       setEditingHistoryId(null);
       setHistoryActionMessage({ type: "success", text: strings.historyEditSaved });
@@ -2169,6 +2213,60 @@ export default function MaintenanceDashboard() {
                             />
                           </div>
                         </div>
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="text-sm font-semibold text-black">{strings.jobCard.workshopSection}</h4>
+                            <button
+                              type="button"
+                              onClick={addHistoryRepairRow}
+                              className="text-sm font-semibold text-black px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-100"
+                            >
+                              + {strings.jobCard.addRepairRow}
+                            </button>
+                          </div>
+                          <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+                            <table className="w-full text-sm">
+                              <thead className="bg-gray-50 text-gray-700">
+                                <tr>
+                                  <th className="px-3 py-2 text-left">{strings.jobCard.repairService}</th>
+                                  <th className="px-3 py-2 text-left">{strings.jobCard.repTag}</th>
+                                  <th className="px-3 py-2 text-left">{strings.jobCard.qty}</th>
+                                  <th className="px-3 py-2 text-left">{strings.jobCard.itemCode}</th>
+                                  <th className="px-3 py-2 text-left">{strings.jobCard.unitPrice}</th>
+                                  <th className="px-3 py-2 text-left">{strings.jobCard.totalPrice}</th>
+                                  <th className="px-3 py-2"></th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {historyRepairs.map((row) => (
+                                  <tr key={row.id} className="border-t">
+                                    {["service", "repTag", "qty", "itemCode", "unitPrice", "totalPrice"].map((field) => (
+                                      <td key={field} className="px-3 py-2">
+                                        <input
+                                          type="text"
+                                          value={row[field] || ""}
+                                          onChange={(event) => handleHistoryRepairChange(row.id, field, event.target.value)}
+                                          className="w-full min-w-[7rem] border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                                        />
+                                      </td>
+                                    ))}
+                                    <td className="px-3 py-2 text-right">
+                                      {historyRepairs.length > 1 && (
+                                        <button
+                                          type="button"
+                                          onClick={() => removeHistoryRepairRow(row.id)}
+                                          className="text-xs text-red-600 hover:text-red-800"
+                                        >
+                                          {strings.jobCard.remove}
+                                        </button>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
                         <div className="flex flex-wrap items-center gap-2">
                           <button
                             type="submit"
@@ -2188,23 +2286,56 @@ export default function MaintenanceDashboard() {
                         </div>
                       </form>
                     ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        <Field label={strings.driver} value={selectedHistoryRecord.driver || "--"} />
-                        <Field label={strings.vehicle} value={selectedHistoryRecord.vehicle || "--"} />
-                        <Field label={strings.date} value={formatDate(selectedHistoryRecord.date)} />
-                        <Field label={strings.mileage} value={selectedHistoryRecord.mileage || "--"} />
-                        <Field label={strings.type} value={formatTypeLabel(selectedHistoryRecord.type)} />
-                        <Field label={strings.workshop} value={selectedHistoryRecord.workshop || "--"} />
-                        <Field label={strings.cost} value={selectedHistoryRecord.cost || "--"} />
-                        <Field label={strings.nextDue} value={formatDate(selectedHistoryRecord.nextDueDate)} />
-                        <Field
-                          label={strings.historyResolvedAt}
-                          value={formatDate(selectedHistoryRecord.resolvedAt, {
-                            dateStyle: "medium",
-                            timeStyle: "short",
-                          })}
-                        />
-                        <Field label={strings.detailNotes} value={selectedHistoryRecord.notes || "--"} />
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          <Field label={strings.driver} value={selectedHistoryRecord.driver || "--"} />
+                          <Field label={strings.vehicle} value={selectedHistoryRecord.vehicle || "--"} />
+                          <Field label={strings.date} value={formatDate(selectedHistoryRecord.date)} />
+                          <Field label={strings.mileage} value={selectedHistoryRecord.mileage || "--"} />
+                          <Field label={strings.type} value={formatTypeLabel(selectedHistoryRecord.type)} />
+                          <Field label={strings.workshop} value={selectedHistoryRecord.workshop || "--"} />
+                          <Field label={strings.cost} value={selectedHistoryRecord.cost || "--"} />
+                          <Field label={strings.nextDue} value={formatDate(selectedHistoryRecord.nextDueDate)} />
+                          <Field
+                            label={strings.historyResolvedAt}
+                            value={formatDate(selectedHistoryRecord.resolvedAt, {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                            })}
+                          />
+                          <Field label={strings.detailNotes} value={selectedHistoryRecord.notes || "--"} />
+                        </div>
+                        {selectedHistoryRecord.jobCard?.repairs?.length > 0 && (
+                          <div>
+                            <h4 className="text-sm font-semibold text-black mb-2">{strings.jobCard.workshopSection}</h4>
+                            <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+                              <table className="w-full text-sm">
+                                <thead className="bg-gray-50 text-gray-700">
+                                  <tr>
+                                    <th className="px-3 py-2 text-left">{strings.jobCard.repairService}</th>
+                                    <th className="px-3 py-2 text-left">{strings.jobCard.repTag}</th>
+                                    <th className="px-3 py-2 text-left">{strings.jobCard.qty}</th>
+                                    <th className="px-3 py-2 text-left">{strings.jobCard.itemCode}</th>
+                                    <th className="px-3 py-2 text-left">{strings.jobCard.unitPrice}</th>
+                                    <th className="px-3 py-2 text-left">{strings.jobCard.totalPrice}</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {selectedHistoryRecord.jobCard.repairs.map((row) => (
+                                    <tr key={row.id || `${row.service}-${row.itemCode}`} className="border-t">
+                                      <td className="px-3 py-2">{row.service || strings.jobCard.noData}</td>
+                                      <td className="px-3 py-2">{row.repTag || strings.jobCard.noData}</td>
+                                      <td className="px-3 py-2">{row.qty || strings.jobCard.noData}</td>
+                                      <td className="px-3 py-2">{row.itemCode || strings.jobCard.noData}</td>
+                                      <td className="px-3 py-2">{row.unitPrice || strings.jobCard.noData}</td>
+                                      <td className="px-3 py-2">{row.totalPrice || strings.jobCard.noData}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
