@@ -664,6 +664,8 @@ export default function DriverDashboard() {
 
   const handleFuelSubmit = async (e) => {
     e.preventDefault();
+    if (!driver?.id) return setFuelMessage({ type: "error", text: "Driver information is unavailable. Please refresh." });
+    if (!vehicle?.id) return setFuelMessage({ type: "error", text: "You are not assigned to a vehicle. Please contact your supervisor." });
     if (!fuelOdometerPhoto) return setFuelMessage({ type: "error", text: "Odometer photo is required." });
     if (!fuelPumpPhoto) return setFuelMessage({ type: "error", text: "Fuel pump photo is required." });
     setFuelSubmitting(true);
@@ -1312,6 +1314,8 @@ export default function DriverDashboard() {
                 ? t[lang].profile
                 : activeTab === "vehicle"
                 ? t[lang].assignedVehicle
+                : activeTab === "fuel"
+                ? "⛽ Fuel Entry"
                 : t[lang].maintenance}
             </h1>
             <p className="text-gray-600 mt-1">
@@ -1596,6 +1600,11 @@ export default function DriverDashboard() {
 
           {activeTab === "fuel" && (
             <Card title="⛽ Fuel Entry">
+              {!vehicle && (
+                <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  You are not assigned to a vehicle. Please contact your supervisor before submitting a fuel entry.
+                </div>
+              )}
               <form onSubmit={handleFuelSubmit} className="space-y-5">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>

@@ -171,6 +171,12 @@ export default function SupervisorDashboard() {
   const [maintenanceLoading, setMaintenanceLoading] = useState(true);
   const [maintenanceError, setMaintenanceError] = useState("");
 
+  // Fuel logs state
+  const [fuelLogs, setFuelLogs] = useState([]);
+  const [fuelLogsLoading, setFuelLogsLoading] = useState(false);
+  const [fuelLogsError, setFuelLogsError] = useState("");
+  const [fuelLogsFilter, setFuelLogsFilter] = useState({ vehicleId: "", from: "", to: "" });
+
   // HR state
   const [employees, setEmployees] = useState([]);
   const [hrLoading, setHrLoading] = useState(false);
@@ -290,6 +296,7 @@ export default function SupervisorDashboard() {
     { key: "monitor", label: "Monitor", icon: "📊" },
     { key: "assign", label: "Assign Driver", icon: "🔗" },
     { key: "report", label: "Daily Report", icon: "⛽" },
+    { key: "fuellogs", label: "Fuel Logs", icon: "🪣" },
     { key: "maintenance", label: "Maintenance", icon: "🛠️" },
     { key: "hr", label: "HR", icon: "👥" },
     { key: "procurement", label: "Procurement", icon: "📦" },
@@ -462,6 +469,30 @@ export default function SupervisorDashboard() {
   useEffect(() => {
     if (activeTab === "procurement") loadProcurements();
   }, [activeTab, loadProcurements]);
+
+  const loadFuelLogs = useCallback(async (filter = {}) => {
+    setFuelLogsLoading(true);
+    setFuelLogsError("");
+    try {
+      const params = new URLSearchParams();
+      if (filter.vehicleId) params.set("vehicleId", filter.vehicleId);
+      if (filter.from) params.set("from", filter.from);
+      if (filter.to) params.set("to", filter.to);
+      const query = params.toString();
+      const res = await fetch(`/api/supervisor/fuel-logs${query ? `?${query}` : ""}`, { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "Failed to load fuel logs.");
+      setFuelLogs(data.logs);
+    } catch (err) {
+      setFuelLogsError(err.message || "Failed to load fuel logs.");
+    } finally {
+      setFuelLogsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "fuellogs") loadFuelLogs(fuelLogsFilter);
+  }, [activeTab, loadFuelLogs]);
 
   const handleAddEmployee = async (e) => {
     e.preventDefault();
@@ -905,6 +936,20 @@ export default function SupervisorDashboard() {
                   )}
                 </form>
               </Card>
+            )}
+
+            {activeTab === "fuellogs" && (
+              <FuelLogsTab
+                logs={fuelLogs}
+                loading={fuelLogsLoading}
+                error={fuelLogsError}
+                trucks={trucks}
+                filter={fuelLogsFilter}
+                onFilterChange={(next) => {
+                  setFuelLogsFilter(next);
+                  loadFuelLogs(next);
+                }}
+              />
             )}
 
             {activeTab === "maintenance" && (
@@ -1544,5 +1589,149 @@ function JobCardModal({ jobCard, onClose }) {
         </div>
       </div>
     </div>
+  );
+}
+
+function FuelLogsTab({ logs, loading, error, trucks, filter, onFilterChange }) {
+  const fmt = (n, decimals = 1) =>
+    n !== null && n !== undefined ? Number(n).toFixed(decimals) : "—";
+
+  return (
+    <Card title="🪣 Driver Fuel Logs">
+      <p className="text-sm text-gray-500 mb-4">
+        All fuel entries submitted by drivers and supervisors, most recent first.
+      </p>
+
+      {/* Filters */}
+      <div className="flex flex-wrap gap-3 mb-5">
+        <select
+          value={filter.vehicleId}
+          onChange={(e) => onFilterChange({ ...filter, vehicleId: e.target.value })}
+          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black"
+        >
+          <option value="">All Trucks</option>
+          {trucks.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.model} — {t.plate}
+            </option>
+          ))}
+        </select>
+        <input
+          type="date"
+          value={filter.from}
+          onChange={(e) => onFilterChange({ ...filter, from: e.target.value })}
+          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black"
+          placeholder="From"
+        />
+        <input
+          type="date"
+          value={filter.to}
+          onChange={(e) => onFilterChange({ ...filter, to: e.target.value })}
+          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black"
+          placeholder="To"
+        />
+        <button
+          type="button"
+          onClick={() => onFilterChange({ vehicleId: "", from: "", to: "" })}
+          className="border border-gray-300 rounded-lg px-3 py-2 text-sm hover:bg-gray-100"
+        >
+          Clear
+        </button>
+      </div>
+
+      {error && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {error}
+        </div>
+      )}
+      {loading && (
+        <div className="mb-4 text-sm text-gray-500">Loading fuel logs...</div>
+      )}
+
+      <div className="overflow-x-auto rounded-lg border border-gray-200">
+        <table className="min-w-[900px] w-full text-sm text-left text-gray-800">
+          <thead className="bg-gray-100 text-gray-900">
+            <tr>
+              <th className="py-3 px-4 font-medium">Date</th>
+              <th className="py-3 px-4 font-medium">Driver</th>
+              <th className="py-3 px-4 font-medium">Truck</th>
+              <th className="py-3 px-4 font-medium">Start KM</th>
+              <th className="py-3 px-4 font-medium">End KM</th>
+              <th className="py-3 px-4 font-medium">Distance</th>
+              <th className="py-3 px-4 font-medium">Liters</th>
+              <th className="py-3 px-4 font-medium">Cost (SAR)</th>
+              <th className="py-3 px-4 font-medium">km/L</th>
+              <th className="py-3 px-4 font-medium">Photos</th>
+            </tr>
+          </thead>
+          <tbody>
+            {logs.length ? (
+              logs.map((log) => (
+                <tr key={log.id} className="border-b hover:bg-gray-50 transition">
+                  <td className="py-2.5 px-4 whitespace-nowrap">
+                    {new Date(log.date).toLocaleDateString()}
+                    <div className="text-xs text-gray-400">{new Date(log.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
+                  </td>
+                  <td className="py-2.5 px-4">
+                    <span>{log.driverName}</span>
+                    <div className="text-xs text-gray-400">{log.submittedBy}</div>
+                  </td>
+                  <td className="py-2.5 px-4">{log.plateNumber}</td>
+                  <td className="py-2.5 px-4">{fmt(log.startKm, 0)}</td>
+                  <td className="py-2.5 px-4">{fmt(log.endKm, 0)}</td>
+                  <td className="py-2.5 px-4">
+                    {log.distanceKm !== null ? (
+                      <span className="font-medium">{fmt(log.distanceKm, 1)} km</span>
+                    ) : "—"}
+                  </td>
+                  <td className="py-2.5 px-4">{fmt(log.liters, 1)} L</td>
+                  <td className="py-2.5 px-4">{log.cost !== null ? fmt(log.cost, 2) : "—"}</td>
+                  <td className="py-2.5 px-4">
+                    {log.efficiency !== null ? (
+                      <span className={`font-medium ${log.efficiency >= 3 ? "text-green-600" : log.efficiency >= 2 ? "text-amber-600" : "text-red-600"}`}>
+                        {fmt(log.efficiency, 2)}
+                      </span>
+                    ) : "—"}
+                  </td>
+                  <td className="py-2.5 px-4">
+                    <div className="flex gap-2">
+                      {log.odometerPhotoUrl && (
+                        <a
+                          href={log.odometerPhotoUrl.startsWith("/") ? `/api/files?path=${encodeURIComponent(log.odometerPhotoUrl)}` : log.odometerPhotoUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-600 hover:underline"
+                        >
+                          Odo
+                        </a>
+                      )}
+                      {log.fuelPumpPhotoUrl && (
+                        <a
+                          href={log.fuelPumpPhotoUrl.startsWith("/") ? `/api/files?path=${encodeURIComponent(log.fuelPumpPhotoUrl)}` : log.fuelPumpPhotoUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-600 hover:underline"
+                        >
+                          Pump
+                        </a>
+                      )}
+                      {!log.odometerPhotoUrl && !log.fuelPumpPhotoUrl && (
+                        <span className="text-gray-400 text-xs">—</span>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td className="py-4 px-4 text-gray-500 text-sm" colSpan={10}>
+                  {loading ? "Loading..." : "No fuel logs found."}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 }
