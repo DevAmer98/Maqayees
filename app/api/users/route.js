@@ -51,7 +51,7 @@ async function persistLicensePhoto(file, driverName) {
       tempPath = path.join(tempDir, `license${ext}`);
       await fs.writeFile(tempPath, buffer);
       const driverFolder = (driverName || "unknown").trim().replace(/[^a-zA-Z0-9_-]/g, "_") || "unknown";
-      const remotePath = `maqayees/${driverFolder}/profile/license${ext}`;
+      const remotePath = `Maqayees/${driverFolder}/profile/license${ext}`;
       return await uploadToSynology(tempPath, remotePath);
     } catch {
       // fall through to local storage

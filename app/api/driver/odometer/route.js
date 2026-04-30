@@ -46,7 +46,7 @@ export async function POST(req) {
       if (hasSynologyConfig()) {
         const dateStr = new Date().toISOString().slice(0, 10);
         const driverFolder = sanitize(driverName);
-        const remotePath = `maqayees/${driverFolder}/odometer/${dateStr}/odometer${ext}`;
+        const remotePath = `Maqayees/${driverFolder}/odometer/${dateStr}/odometer${ext}`;
         try {
           photoUrl = await uploadToSynology(tempPath, remotePath);
         } catch {

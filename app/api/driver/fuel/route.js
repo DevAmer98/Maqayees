@@ -65,7 +65,7 @@ export async function POST(req) {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "maq-fuel-"));
     const dateStr = new Date().toISOString().slice(0, 10);
     const driverFolder = sanitize(driverName);
-    const baseRemote = `maqayees/${driverFolder}/fuel/${dateStr}`;
+    const baseRemote = `Maqayees/${driverFolder}/fuel/${dateStr}`;
 
     const { filePath: odomPath, ext: odomExt } = await saveTemp(odometerPhoto, tempDir, "odometer");
     const { filePath: pumpPath, ext: pumpExt } = await saveTemp(pumpPhoto, tempDir, "pump");
