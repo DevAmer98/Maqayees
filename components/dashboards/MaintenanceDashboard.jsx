@@ -195,9 +195,26 @@ export default function MaintenanceDashboard() {
     }
   }, []);
 
+  const loadRequestsFromDb = useCallback(async () => {
+    try {
+      const response = await fetch("/api/maintenance?status=pending", {
+        method: "GET",
+        cache: "no-store",
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.success || !Array.isArray(data.requests)) return false;
+      setRequests(data.requests);
+      return true;
+    } catch (error) {
+      console.error("Failed to fetch maintenance requests:", error);
+      return false;
+    }
+  }, []);
+
   useEffect(() => {
     void loadHistoryFromDb();
-  }, [loadHistoryFromDb]);
+    void loadRequestsFromDb();
+  }, [loadHistoryFromDb, loadRequestsFromDb]);
 
   useEffect(() => {
     setSelectedHistoryId((prev) => {
@@ -1071,6 +1088,25 @@ export default function MaintenanceDashboard() {
     return data.maintenance;
   }, []);
 
+  const resolveMaintenanceRequestInDb = useCallback(async (requestId, nextStatus, note) => {
+    const response = await fetch("/api/maintenance", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        requestId,
+        status: nextStatus,
+        decisionNote: note,
+      }),
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data?.success) {
+      throw new Error(data?.error || "Failed to update maintenance request.");
+    }
+    return data.request;
+  }, []);
+
   useEffect(() => {
     if (!selectedRequest) return;
     if (jobCardSnapshots[selectedRequest.id]) return;
@@ -1195,6 +1231,19 @@ export default function MaintenanceDashboard() {
     const resolvedAt = new Date().toISOString();
     const nextStatus = decision === "approve" ? "approved" : "rejected";
 
+    if (selectedRequest.vehicleId) {
+      try {
+        await resolveMaintenanceRequestInDb(selectedRequest.id, nextStatus, decisionNote);
+      } catch (error) {
+        console.error("Failed to resolve maintenance request:", error);
+        setStatusMessage({
+          type: "error",
+          text: error?.message || "Failed to update maintenance request.",
+        });
+        return;
+      }
+    }
+
     setRequests((prev) => {
       const updated = prev.map((req) =>
         req.id === selectedRequest.id
@@ -1243,6 +1292,7 @@ export default function MaintenanceDashboard() {
       text: decision === "approve" ? strings.messageApproved : strings.messageRejected,
     });
     setDecisionNote("");
+    void loadRequestsFromDb();
   };
 
   const renderAttachmentName = (item, index) => {

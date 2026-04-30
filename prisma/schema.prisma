@@ -81,7 +81,8 @@ model Vehicle {
   driverId     String?
   project      Project?      @relation("ProjectVehicles", fields: [projectId], references: [id])
   projectId    String?
-  maintenances Maintenance[]
+  maintenances        Maintenance[]
+  maintenanceRequests MaintenanceRequest[]
   fuelLogs     FuelLog[] // 👈 back-relation added
   stoppageLogs StoppageLog[] // 👈 back-relation added
   createdAt    DateTime      @default(now())
@@ -100,6 +101,27 @@ model Maintenance {
   nextDueDate DateTime?
   attachment  String? // URL to image/PDF (S3 or local)
   createdAt   DateTime  @default(now())
+}
+
+model MaintenanceRequest {
+  id           String   @id @default(uuid())
+  vehicle      Vehicle  @relation(fields: [vehicleId], references: [id])
+  vehicleId    String
+  driverId     String?
+  driverName   String?
+  type         String
+  date         DateTime
+  mileage      Int
+  notes        String?
+  status       String   @default("pending")
+  decisionNote String?
+  resolvedAt   DateTime?
+  submittedAt  DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([status, submittedAt])
+  @@index([vehicleId])
 }
 
 model FuelLog {

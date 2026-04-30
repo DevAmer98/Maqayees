@@ -948,13 +948,13 @@ export default function DriverDashboard() {
 
       setMaintenanceRecords((prev) => [
         {
-          id: data.maintenance.id,
+          id: data.request?.id || data.maintenance?.id,
           date,
           typeKey: type,
           typeLabel: typeOption?.label,
           mileage: formattedMileage,
-          cost: "N/A",
-          workshop: "N/A",
+          cost: data.maintenance ? data.maintenance.cost ?? "N/A" : "Pending",
+          workshop: data.maintenance ? data.maintenance.workshop || "N/A" : "Maintenance team",
         },
         ...prev,
       ]);
