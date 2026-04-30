@@ -13,7 +13,10 @@ export default function LogoutButton({
 
   const handleClick = () => {
     startTransition(() => {
-      signOut({ callbackUrl });
+      const url = callbackUrl.startsWith("http")
+        ? callbackUrl
+        : `${window.location.origin}${callbackUrl}`;
+      signOut({ callbackUrl: url });
     });
   };
 
