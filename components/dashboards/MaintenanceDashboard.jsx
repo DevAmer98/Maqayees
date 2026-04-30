@@ -75,9 +75,7 @@ const buildJobCardDefaults = (request) => {
     jobNo: generateJobCardNumber(),
     plateNo: plate,
     driverName: request?.driver || "",
-    assetCode: "",
     project: "",
-    application: "",
     vehicleType: model,
     kms: request?.mileage || "",
     model,
@@ -774,9 +772,7 @@ export default function MaintenanceDashboard() {
     { key: "jobNo", label: strings.jobCard.jobNo },
     { key: "plateNo", label: strings.jobCard.plateNo },
     { key: "driverName", label: strings.jobCard.driverName },
-    { key: "assetCode", label: strings.jobCard.assetCode },
     { key: "project", label: strings.jobCard.project },
-    { key: "application", label: strings.jobCard.application },
     { key: "vehicleType", label: strings.jobCard.vehicleType },
     { key: "kms", label: strings.jobCard.kms },
     { key: "model", label: strings.jobCard.model },
@@ -992,17 +988,17 @@ export default function MaintenanceDashboard() {
       [
         { label: jc.plateNo, value: jobCardInfo.plateNo },
         { label: jc.driverName, value: jobCardInfo.driverName },
-        { label: jc.application, value: jobCardInfo.application },
-      ],
-      [
-        { label: jc.assetCode, value: jobCardInfo.assetCode },
         { label: jc.vehicleType, value: jobCardInfo.vehicleType },
-        { label: jc.project, value: jobCardInfo.project },
       ],
       [
+        { label: jc.project, value: jobCardInfo.project },
         { label: jc.kms, value: jobCardInfo.kms },
         { label: jc.model, value: jobCardInfo.model },
+      ],
+      [
         { label: jc.complaint, value: jobCardInfo.complaint },
+        { label: jc.repairType, value: jobCardInfo.repairType },
+        { label: jc.dateIn, value: jobCardInfo.dateIn },
       ],
       [
         { label: jc.dateIn, value: jobCardInfo.dateIn },
@@ -1462,6 +1458,31 @@ export default function MaintenanceDashboard() {
     return `Attachment ${index + 1}`;
   };
 
+  const getAttachmentUrl = (item) => {
+    if (!item) return "";
+    if (typeof item === "string") return item;
+    if (item.url) return item.url;
+    if (item.path) return `/api/files?path=${encodeURIComponent(item.path)}`;
+    if (item instanceof Blob) return URL.createObjectURL(item);
+    return "";
+  };
+
+  const renderAttachmentLink = (item, index) => {
+    const name = renderAttachmentName(item, index);
+    const url = getAttachmentUrl(item);
+    if (!url) return <span>{name}</span>;
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        className="font-medium text-blue-700 hover:text-blue-900 hover:underline"
+      >
+        {name}
+      </a>
+    );
+  };
+
   return (
     <div
       className={`min-h-screen flex bg-gradient-to-br from-gray-50 via-gray-100 to-gray-200 text-gray-900 ${
@@ -1672,7 +1693,7 @@ export default function MaintenanceDashboard() {
                               <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-gray-200 text-xs font-semibold text-gray-700">
                                 {index + 1}
                               </span>
-                              {renderAttachmentName(item, index)}
+                              {renderAttachmentLink(item, index)}
                             </li>
                           ))}
                         </ul>
@@ -1783,7 +1804,7 @@ export default function MaintenanceDashboard() {
                             {attachments.length > 0 && (
                               <ul className="mt-3 space-y-1 text-sm text-gray-600">
                                 {attachments.map((item, index) => (
-                                  <li key={index}>{renderAttachmentName(item, index)}</li>
+                                  <li key={index}>{renderAttachmentLink(item, index)}</li>
                                 ))}
                               </ul>
                             )}
