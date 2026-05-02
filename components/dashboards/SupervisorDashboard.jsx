@@ -149,6 +149,7 @@ function openChecklistPdf(driverName, checklist) {
 export default function SupervisorDashboard() {
   const [activeTab, setActiveTab] = useState("monitor");
   const [selectedTruck, setSelectedTruck] = useState("all");
+  const [dateFilter, setDateFilter] = useState({ from: "", to: "" });
   const [assignment, setAssignment] = useState({ driver: "", truck: "" });
   const [message, setMessage] = useState("");
   const [drivers, setDrivers] = useState([]);
@@ -334,8 +335,12 @@ export default function SupervisorDashboard() {
     setMonitorLoading(true);
     setMonitorError("");
     try {
-      const query = selectedTruck !== "all" ? `?truckId=${encodeURIComponent(selectedTruck)}` : "";
-      const response = await fetch(`/api/supervisor/monitor${query}`, { cache: "no-store" });
+      const params = new URLSearchParams();
+      if (selectedTruck !== "all") params.set("truckId", selectedTruck);
+      if (dateFilter.from) params.set("from", dateFilter.from);
+      if (dateFilter.to) params.set("to", dateFilter.to);
+      const query = params.toString();
+      const response = await fetch(`/api/supervisor/monitor${query ? `?${query}` : ""}`, { cache: "no-store" });
       const payload = await response.json();
       if (!response.ok || !payload?.success) {
         throw new Error(payload?.error || "Failed to load monitor data.");
@@ -353,7 +358,7 @@ export default function SupervisorDashboard() {
     } finally {
       setMonitorLoading(false);
     }
-  }, [selectedTruck]);
+  }, [selectedTruck, dateFilter]);
 
   useEffect(() => {
     loadMonitorData();
@@ -545,6 +550,8 @@ export default function SupervisorDashboard() {
                 trucks={trucks}
                 selectedTruck={selectedTruck}
                 setSelectedTruck={setSelectedTruck}
+                dateFilter={dateFilter}
+                setDateFilter={setDateFilter}
                 formatTruckLabel={formatTruckLabel}
                 monitorData={monitorData}
                 monitorLoading={monitorLoading}
@@ -878,16 +885,31 @@ function Select({ label, value, onChange, options, placeholder }) {
   );
 }
 
+function exportToCSV(filename, headers, rows) {
+  const escape = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const lines = [headers.map(escape).join(","), ...rows.map((row) => row.map(escape).join(","))];
+  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 /* --- Monitor Tab Extracted --- */
 function MonitorTab({
   trucks,
   selectedTruck,
   setSelectedTruck,
+  dateFilter,
+  setDateFilter,
   formatTruckLabel,
   monitorData,
   monitorLoading,
   monitorError,
 }) {
+  const [localDate, setLocalDate] = useState({ from: dateFilter.from, to: dateFilter.to });
   const visibleDrivers = monitorData.activeDrivers;
 
   const weeklyMileage =
@@ -916,6 +938,44 @@ function MonitorTab({
           { day: "Sat", fuel: 0 },
         ];
 
+  function handleApplyDateFilter() {
+    if (localDate.from && localDate.to && localDate.from > localDate.to) return;
+    setDateFilter(localDate);
+  }
+
+  function handleResetDateFilter() {
+    setLocalDate({ from: "", to: "" });
+    setDateFilter({ from: "", to: "" });
+  }
+
+  function handleExportDriversCSV() {
+    exportToCSV(
+      `fleet-drivers-${new Date().toISOString().slice(0, 10)}.csv`,
+      ["Driver", "Truck", "Status", "Last Update"],
+      visibleDrivers.map((d) => [
+        d.name,
+        d.truck || "Unassigned",
+        d.status,
+        d.lastUpdate && d.lastUpdate !== "—" ? new Date(d.lastUpdate).toLocaleString() : "—",
+      ])
+    );
+  }
+
+  function handleExportChartsCSV() {
+    const rows = weeklyMileage.map((m, i) => [
+      m.day,
+      m.mileage,
+      weeklyFuel[i]?.fuel ?? 0,
+    ]);
+    exportToCSV(
+      `fleet-weekly-${new Date().toISOString().slice(0, 10)}.csv`,
+      ["Day", "Mileage (km)", "Fuel (L)"],
+      rows
+    );
+  }
+
+  const hasDateFilter = dateFilter.from && dateFilter.to;
+
   return (
     <Card title="Fleet Monitoring">
       <p className="text-gray-600 text-sm mb-4">
@@ -931,21 +991,89 @@ function MonitorTab({
           Loading monitoring data...
         </div>
       )}
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h3 className="text-md font-semibold text-black">Fleet Monitoring</h3>
-        <select
-          value={selectedTruck}
-          onChange={(e) => setSelectedTruck(e.target.value)}
-          className="w-full sm:w-auto border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black"
+
+      {/* Filters bar */}
+      <div className="mb-4 flex flex-wrap gap-3 items-end">
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-gray-500">Truck</label>
+          <select
+            value={selectedTruck}
+            onChange={(e) => setSelectedTruck(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black"
+          >
+            <option value="all">All Trucks</option>
+            {trucks.map((truck) => (
+              <option key={truck.id} value={truck.id} title={`${truck.model} — ${truck.plate}`}>
+                {formatTruckLabel(truck)}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-gray-500">From</label>
+          <input
+            type="date"
+            value={localDate.from}
+            onChange={(e) => setLocalDate((p) => ({ ...p, from: e.target.value }))}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black"
+          />
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-gray-500">To</label>
+          <input
+            type="date"
+            value={localDate.to}
+            min={localDate.from || undefined}
+            onChange={(e) => setLocalDate((p) => ({ ...p, to: e.target.value }))}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black"
+          />
+        </div>
+
+        <button
+          type="button"
+          onClick={handleApplyDateFilter}
+          disabled={!localDate.from || !localDate.to}
+          className="rounded-lg bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-40 transition"
         >
-          <option value="all">All Trucks</option>
-          {trucks.map((truck) => (
-            <option key={truck.id} value={truck.id} title={`${truck.model} — ${truck.plate}`}>
-              {formatTruckLabel(truck)}
-            </option>
-          ))}
-        </select>
+          Apply
+        </button>
+
+        {hasDateFilter && (
+          <button
+            type="button"
+            onClick={handleResetDateFilter}
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition"
+          >
+            Reset
+          </button>
+        )}
+
+        {/* Export buttons */}
+        <div className="ml-auto flex gap-2">
+          <button
+            type="button"
+            onClick={handleExportChartsCSV}
+            className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100 transition"
+          >
+            Export Charts CSV
+          </button>
+          <button
+            type="button"
+            onClick={handleExportDriversCSV}
+            className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100 transition"
+          >
+            Export Drivers CSV
+          </button>
+        </div>
       </div>
+
+      {hasDateFilter && (
+        <p className="mb-3 text-xs text-gray-500">
+          Showing data from <strong>{dateFilter.from}</strong> to <strong>{dateFilter.to}</strong>
+        </p>
+      )}
 
       {/* Charts */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6 mb-8">

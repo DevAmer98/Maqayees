@@ -16,7 +16,7 @@ function formatDayKey(date) {
   return `${year}-${month}-${day}`;
 }
 
-function buildWeekBuckets() {
+function buildDefaultWeekBuckets() {
   const today = startOfDay(new Date());
   const buckets = [];
   for (let offset = 6; offset >= 0; offset -= 1) {
@@ -32,6 +32,40 @@ function buildWeekBuckets() {
   return buckets;
 }
 
+function buildRangeBuckets(from, to) {
+  const buckets = [];
+  const cursor = startOfDay(from);
+  const end = startOfDay(to);
+  const dayMs = 24 * 60 * 60 * 1000;
+  const totalDays = Math.round((end - cursor) / dayMs) + 1;
+
+  // For ranges > 14 days, group into weeks; otherwise daily
+  if (totalDays <= 31) {
+    while (cursor <= end) {
+      const label =
+        totalDays <= 14
+          ? WEEKDAY_LABELS[cursor.getDay()]
+          : cursor.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      buckets.push({ dayKey: formatDayKey(cursor), label, mileage: 0, fuel: 0 });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+  } else {
+    // Cap at 31 days from `from`
+    for (let i = 0; i < 31; i++) {
+      const d = new Date(from);
+      d.setDate(d.getDate() + i);
+      if (d > end) break;
+      buckets.push({
+        dayKey: formatDayKey(d),
+        label: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        mileage: 0,
+        fuel: 0,
+      });
+    }
+  }
+  return buckets;
+}
+
 function formatLastUpdate(dateValue) {
   if (!dateValue) return "—";
   const parsed = new Date(dateValue);
@@ -43,19 +77,37 @@ export async function GET(req) {
   try {
     const { searchParams } = new URL(req.url);
     const selectedTruckId = String(searchParams.get("truckId") || "").trim();
-    const weekBuckets = buildWeekBuckets();
-    const weekStart = new Date(weekBuckets[0].dayKey);
-    const weekEnd = new Date(weekBuckets[weekBuckets.length - 1].dayKey);
-    weekEnd.setHours(23, 59, 59, 999);
+    const fromParam = searchParams.get("from");
+    const toParam = searchParams.get("to");
 
-    const [drivers, vehicles, activeShifts, fuelLogs, checklists] = await Promise.all([
+    let weekBuckets;
+    let weekStart;
+    let weekEnd;
+
+    if (fromParam && toParam) {
+      const parsedFrom = new Date(fromParam);
+      const parsedTo = new Date(toParam);
+      if (Number.isNaN(parsedFrom.getTime()) || Number.isNaN(parsedTo.getTime())) {
+        return NextResponse.json({ success: false, error: "Invalid date range." }, { status: 400 });
+      }
+      weekStart = startOfDay(parsedFrom);
+      weekEnd = startOfDay(parsedTo);
+      weekEnd.setHours(23, 59, 59, 999);
+      weekBuckets = buildRangeBuckets(parsedFrom, parsedTo);
+    } else {
+      weekBuckets = buildDefaultWeekBuckets();
+      weekStart = new Date(weekBuckets[0].dayKey);
+      weekEnd = new Date(weekBuckets[weekBuckets.length - 1].dayKey);
+      weekEnd.setHours(23, 59, 59, 999);
+    }
+
+    const vehicleFilter = selectedTruckId ? { vehicleId: selectedTruckId } : {};
+
+    const [drivers, vehicles, activeShifts, fuelLogs, priorLogs, checklists] = await Promise.all([
       prisma.user.findMany({
         where: { role: "driver" },
         orderBy: { name: "asc" },
-        select: {
-          id: true,
-          name: true,
-        },
+        select: { id: true, name: true },
       }),
       prisma.vehicle.findMany({
         select: {
@@ -77,19 +129,30 @@ export async function GET(req) {
           updatedAt: true,
         },
       }),
+      // Fuel logs within the selected range (ordered by vehicle + date for distance calc)
       prisma.fuelLog.findMany({
         where: {
-          ...(selectedTruckId ? { vehicleId: selectedTruckId } : {}),
-          date: {
-            gte: weekStart,
-            lte: weekEnd,
-          },
+          ...vehicleFilter,
+          date: { gte: weekStart, lte: weekEnd },
         },
+        orderBy: [{ vehicleId: "asc" }, { date: "asc" }],
         select: {
+          vehicleId: true,
           date: true,
           distanceCoveredKm: true,
+          endKmHr: true,
           fuelRefilledLiters: true,
         },
+      }),
+      // Last fuel log per vehicle BEFORE the range — used as mileage baseline
+      prisma.fuelLog.findMany({
+        where: {
+          ...vehicleFilter,
+          date: { lt: weekStart },
+        },
+        orderBy: [{ vehicleId: "asc" }, { date: "desc" }],
+        distinct: ["vehicleId"],
+        select: { vehicleId: true, endKmHr: true },
       }),
       prisma.driverChecklist.findMany({
         orderBy: { updatedAt: "desc" },
@@ -103,6 +166,7 @@ export async function GET(req) {
       }),
     ]);
 
+    // --- Driver & checklist resolution ---
     const checklistByDriverId = new Map();
     checklists.forEach((checklist) => {
       if (!checklistByDriverId.has(checklist.driverId)) {
@@ -185,20 +249,43 @@ export async function GET(req) {
       const selectedTruck = vehicles.find((vehicle) => vehicle.id === selectedTruckId);
       const selectedPlate = selectedTruck?.plateNumber || "";
       const selectedPlateLower = selectedPlate.toLowerCase();
-
       activeDrivers = activeDrivers.filter((driver) => {
         const truckLabel = String(driver.truck || "").toLowerCase();
         return selectedPlateLower ? truckLabel.includes(selectedPlateLower) : false;
       });
     }
 
+    // --- Mileage & fuel chart calculation ---
+    // Seed per-vehicle km baseline from last log before range start
+    const lastKmByVehicle = new Map(
+      priorLogs
+        .filter((l) => l.endKmHr !== null)
+        .map((l) => [l.vehicleId, Number(l.endKmHr)])
+    );
+
     const weeklyByDay = new Map(weekBuckets.map((bucket) => [bucket.dayKey, bucket]));
+
     fuelLogs.forEach((log) => {
       const key = formatDayKey(new Date(log.date));
       const bucket = weeklyByDay.get(key);
       if (!bucket) return;
 
-      const distance = Number(log.distanceCoveredKm || 0);
+      // Use stored distanceCoveredKm, or compute from baseline if it's null (first-ever entry)
+      let distance = 0;
+      if (log.distanceCoveredKm !== null && log.distanceCoveredKm !== undefined) {
+        distance = Number(log.distanceCoveredKm);
+      } else {
+        const prevKm = lastKmByVehicle.get(log.vehicleId);
+        if (prevKm !== undefined && log.endKmHr !== null && log.endKmHr !== undefined) {
+          distance = Math.max(0, Number(log.endKmHr) - prevKm);
+        }
+      }
+
+      // Advance the running km so subsequent same-vehicle entries in range compute correctly
+      if (log.endKmHr !== null && log.endKmHr !== undefined) {
+        lastKmByVehicle.set(log.vehicleId, Number(log.endKmHr));
+      }
+
       const fuel = Number(log.fuelRefilledLiters || 0);
       bucket.mileage += Number.isFinite(distance) ? distance : 0;
       bucket.fuel += Number.isFinite(fuel) ? fuel : 0;
