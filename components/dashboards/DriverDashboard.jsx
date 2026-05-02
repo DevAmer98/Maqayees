@@ -1737,215 +1737,276 @@ export default function DriverDashboard() {
         </div>
       </main>
 
-      {/* Modal */}
+      {/* Modals — bottom sheet on mobile, centered on sm+ */}
       <AnimatePresence>
         {showStartModal && (
-          <motion.div key="start-modal" className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
-            <motion.div className="bg-white rounded-3xl shadow-2xl p-6 w-full max-w-md">
-              <button
-                onClick={() => {
-                  setShowStartModal(false);
-                  setStartError("");
-                  setStartMileage("");
-                  setStartMileagePhoto(null);
-                  setStartVehiclePhotos([]);
-                }}
-                className="absolute top-3 right-3 text-gray-500 text-xl"
-              >
-                ×
-              </button>
-              <h3 className="text-2xl font-semibold text-black mb-2 text-center">{t[lang].startShift}</h3>
-              <p className="text-gray-600 text-sm mb-6 text-center">
-                {t[lang].mileagePrompt} &nbsp;{t[lang].uploadPhoto}
-              </p>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t[lang].mileagePrompt}</label>
-                <input
-                  type="number"
-                  value={startMileage}
-                  onChange={(e) => setStartMileage(e.target.value)}
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2 focus:ring-2 focus:ring-black text-sm"
-                  placeholder="Enter starting mileage"
-                />
-              </div>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t[lang].uploadPhoto}</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setStartMileagePhoto(e.target.files[0])}
-                  className="w-full text-sm text-gray-700 border border-gray-300 rounded-xl bg-gray-50 file:bg-black file:text-white file:py-2 file:px-4 file:rounded-lg"
-                />
-              </div>
-              <div className="mb-4">
-                <div className="flex items-center justify-between">
-                  <label className="block text-sm font-medium text-gray-700">{t[lang].vehiclePhotos}</label>
-                  <span className="text-xs text-gray-500">
-                    {startVehiclePhotos.length}/{MAX_VEHICLE_PHOTOS}
-                  </span>
+          <motion.div
+            key="start-modal"
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            {/* Backdrop */}
+            <div
+              className="absolute inset-0 bg-black/50"
+              onClick={() => { setShowStartModal(false); setStartError(""); setStartMileage(""); setStartMileagePhoto(null); setStartVehiclePhotos([]); }}
+            />
+            <motion.div
+              className="relative z-10 flex w-full max-w-md flex-col rounded-t-3xl sm:rounded-3xl bg-white shadow-2xl max-h-[92dvh]"
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 32, stiffness: 320 }}
+            >
+              {/* Fixed header */}
+              <div className="flex-shrink-0 border-b border-gray-100 px-6 pb-4 pt-5">
+                <div className="mb-1 flex items-start justify-between gap-2">
+                  <h3 className="text-xl font-semibold text-black">{t[lang].startShift}</h3>
+                  <button
+                    onClick={() => { setShowStartModal(false); setStartError(""); setStartMileage(""); setStartMileagePhoto(null); setStartVehiclePhotos([]); }}
+                    className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-600 text-lg leading-none hover:bg-gray-200"
+                  >
+                    ×
+                  </button>
                 </div>
-                <p className="text-xs text-gray-500 mb-2">{t[lang].vehiclePhotoInstruction}</p>
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={(e) => {
-                    handleVehiclePhotoAdd("start", e.target.files);
-                    e.target.value = "";
-                  }}
-                  className="w-full text-sm text-gray-700 border border-gray-300 rounded-xl bg-gray-50 file:bg-black file:text-white file:py-2 file:px-4 file:rounded-lg"
-                />
+                <p className="text-sm text-gray-500">{t[lang].mileagePrompt} · {t[lang].uploadPhoto}</p>
               </div>
-              {!!startVehiclePhotoPreviews.length && (
-                <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  {startVehiclePhotoPreviews.map((preview, index) => (
-                    <div key={`${preview.url}-${index}`} className="group relative overflow-hidden rounded-lg border border-gray-200 bg-white">
-                      <img src={preview.url} alt={preview.name} className="h-24 w-full object-cover" />
-                      <button
-                        type="button"
-                        onClick={() => handleVehiclePhotoRemove("start", index)}
-                        className="absolute right-2 top-2 rounded-full bg-black/70 px-2 py-0.5 text-xs font-semibold text-white opacity-0 transition group-hover:opacity-100"
-                      >
-                        &times;
-                      </button>
+
+              {/* Scrollable body */}
+              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+                {/* Mileage input */}
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">{t[lang].mileagePrompt}</label>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    value={startMileage}
+                    onChange={(e) => setStartMileage(e.target.value)}
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-base focus:ring-2 focus:ring-black focus:outline-none"
+                    placeholder="Enter starting mileage"
+                  />
+                </div>
+
+                {/* Odometer photo */}
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">{t[lang].uploadPhoto}</label>
+                  <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-700 active:bg-gray-100">
+                    <span className="rounded-lg bg-black px-3 py-1.5 text-xs font-semibold text-white">Choose file</span>
+                    <span className="truncate text-gray-500">
+                      {startMileagePhoto ? startMileagePhoto.name : "No file chosen"}
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="sr-only"
+                      onChange={(e) => setStartMileagePhoto(e.target.files[0])}
+                    />
+                  </label>
+                  {startPreviewUrl && (
+                    <img src={startPreviewUrl} className="mt-3 h-32 w-full rounded-xl border object-cover" alt="Odometer preview" />
+                  )}
+                </div>
+
+                {/* Vehicle photos */}
+                <div>
+                  <div className="mb-1 flex items-center justify-between">
+                    <label className="text-sm font-medium text-gray-700">{t[lang].vehiclePhotos}</label>
+                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                      {startVehiclePhotos.length}/{MAX_VEHICLE_PHOTOS}
+                    </span>
+                  </div>
+                  <p className="mb-2 text-xs text-gray-500">{t[lang].vehiclePhotoInstruction}</p>
+                  <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-700 active:bg-gray-100">
+                    <span className="rounded-lg bg-black px-3 py-1.5 text-xs font-semibold text-white">Choose files</span>
+                    <span className="text-gray-500">No file chosen</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="sr-only"
+                      onChange={(e) => { handleVehiclePhotoAdd("start", e.target.files); e.target.value = ""; }}
+                    />
+                  </label>
+                  {!!startVehiclePhotoPreviews.length && (
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      {startVehiclePhotoPreviews.map((preview, index) => (
+                        <div key={`${preview.url}-${index}`} className="relative overflow-hidden rounded-xl border border-gray-200">
+                          <img src={preview.url} alt={preview.name} className="h-28 w-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => handleVehiclePhotoRemove("start", index)}
+                            className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-xs font-bold text-white"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
-              )}
-              {startPreviewUrl && (
-                <img src={startPreviewUrl} className="w-full h-40 object-cover rounded-lg border mt-3 mb-4" alt="Starting odometer preview" />
-              )}
-              {startError && <p className="text-red-600 text-sm mb-3 text-center">{startError}</p>}
-              <div className="flex justify-end gap-3">
+
+                {startError && (
+                  <p className="rounded-xl bg-red-50 px-4 py-3 text-center text-sm text-red-600">{startError}</p>
+                )}
+              </div>
+
+              {/* Sticky footer */}
+              <div className="flex-shrink-0 flex justify-end gap-3 border-t border-gray-100 bg-white px-6 py-4 rounded-b-3xl">
                 <button
-                  onClick={() => {
-                    setShowStartModal(false);
-                    setStartError("");
-                    setStartMileage("");
-                    setStartMileagePhoto(null);
-                    setStartVehiclePhotos([]);
-                  }}
-                  className="px-4 py-2.5 rounded-xl bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium"
+                  onClick={() => { setShowStartModal(false); setStartError(""); setStartMileage(""); setStartMileagePhoto(null); setStartVehiclePhotos([]); }}
+                  className="rounded-xl bg-gray-100 px-5 py-3 text-sm font-medium text-gray-800 hover:bg-gray-200 active:bg-gray-200"
                 >
                   {t[lang].cancel}
                 </button>
                 <button
                   onClick={handleStartShift}
                   disabled={startSubmitting}
-                  className={`px-4 py-2.5 rounded-xl font-semibold text-white ${
-                    startSubmitting ? "bg-gray-500 cursor-not-allowed" : "bg-black hover:bg-gray-900"
-                  }`}
+                  className={`rounded-xl px-5 py-3 text-sm font-semibold text-white ${startSubmitting ? "bg-gray-400 cursor-not-allowed" : "bg-black hover:bg-gray-900 active:bg-gray-800"}`}
                 >
-                  {t[lang].startDuty}
+                  {startSubmitting ? "..." : t[lang].startDuty}
                 </button>
               </div>
             </motion.div>
           </motion.div>
         )}
+
         {showEndModal && (
-          <motion.div key="end-modal" className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
-            <motion.div className="relative w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
-              <button
-                onClick={() => {
-                  setShowEndModal(false);
-                  setEndError("");
-                  setEndMileage("");
-                  setEndMileagePhoto(null);
-                  setEndVehiclePhotos([]);
-                }}
-                className="absolute top-3 right-3 text-xl text-gray-500"
-              >
-                ×
-              </button>
-              <h3 className="mb-2 text-center text-2xl font-semibold text-black">{t[lang].endShift}</h3>
-              <p className="mb-6 text-center text-sm text-gray-600">
-                {t[lang].endMileagePrompt} &nbsp;{t[lang].endUploadPhoto}
-              </p>
-              {recordedStartMileage !== null && (
-                <div className="mb-4 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
-                  <span className="font-medium">Current odometer:</span>{" "}
-                  {new Intl.NumberFormat("en-US").format(recordedStartMileage)} km
+          <motion.div
+            key="end-modal"
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            {/* Backdrop */}
+            <div
+              className="absolute inset-0 bg-black/50"
+              onClick={() => { setShowEndModal(false); setEndError(""); setEndMileage(""); setEndMileagePhoto(null); setEndVehiclePhotos([]); }}
+            />
+            <motion.div
+              className="relative z-10 flex w-full max-w-md flex-col rounded-t-3xl sm:rounded-3xl bg-white shadow-2xl max-h-[92dvh]"
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 32, stiffness: 320 }}
+            >
+              {/* Fixed header */}
+              <div className="flex-shrink-0 border-b border-gray-100 px-6 pb-4 pt-5">
+                <div className="mb-1 flex items-start justify-between gap-2">
+                  <h3 className="text-xl font-semibold text-black">{t[lang].endShift}</h3>
+                  <button
+                    onClick={() => { setShowEndModal(false); setEndError(""); setEndMileage(""); setEndMileagePhoto(null); setEndVehiclePhotos([]); }}
+                    className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-600 text-lg leading-none hover:bg-gray-200"
+                  >
+                    ×
+                  </button>
                 </div>
-              )}
-              <div className="mb-4">
-                <label className="mb-1 block text-sm font-medium text-gray-700">{t[lang].endMileagePrompt}</label>
-                <input
-                  type="number"
-                  value={endMileage}
-                  onChange={(e) => setEndMileage(e.target.value)}
-                  className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-black"
-                  placeholder="Enter ending mileage"
-                />
+                <p className="text-sm text-gray-500">{t[lang].endMileagePrompt} · {t[lang].endUploadPhoto}</p>
               </div>
-              <div className="mb-4">
-                <label className="mb-1 block text-sm font-medium text-gray-700">{t[lang].endUploadPhoto}</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setEndMileagePhoto(e.target.files[0])}
-                  className="w-full rounded-xl border border-gray-300 bg-gray-50 text-sm text-gray-700 file:rounded-lg file:bg-black file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white"
-                />
-              </div>
-              <div className="mb-4">
-                <div className="flex items-center justify-between">
-                  <label className="block text-sm font-medium text-gray-700">{t[lang].vehiclePhotos}</label>
-                  <span className="text-xs text-gray-500">
-                    {endVehiclePhotos.length}/{MAX_VEHICLE_PHOTOS}
-                  </span>
+
+              {/* Scrollable body */}
+              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+                {/* Current odometer pill */}
+                {recordedStartMileage !== null && (
+                  <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+                    <span className="font-medium">Current odometer:</span>{" "}
+                    <span className="font-semibold text-black">{new Intl.NumberFormat("en-US").format(recordedStartMileage)} km</span>
+                  </div>
+                )}
+
+                {/* End mileage input */}
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">{t[lang].endMileagePrompt}</label>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    value={endMileage}
+                    onChange={(e) => setEndMileage(e.target.value)}
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-base focus:ring-2 focus:ring-black focus:outline-none"
+                    placeholder="Enter ending mileage"
+                  />
                 </div>
-                <p className="text-xs text-gray-500 mb-2">{t[lang].vehiclePhotoInstruction}</p>
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={(e) => {
-                    handleVehiclePhotoAdd("end", e.target.files);
-                    e.target.value = "";
-                  }}
-                  className="w-full rounded-xl border border-gray-300 bg-gray-50 text-sm text-gray-700 file:rounded-lg file:bg-black file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white"
-                />
-              </div>
-              {!!endVehiclePhotoPreviews.length && (
-                <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  {endVehiclePhotoPreviews.map((preview, index) => (
-                    <div key={`${preview.url}-${index}`} className="group relative overflow-hidden rounded-lg border border-gray-200 bg-white">
-                      <img src={preview.url} alt={preview.name} className="h-24 w-full object-cover" />
-                      <button
-                        type="button"
-                        onClick={() => handleVehiclePhotoRemove("end", index)}
-                        className="absolute right-2 top-2 rounded-full bg-black/70 px-2 py-0.5 text-xs font-semibold text-white opacity-0 transition group-hover:opacity-100"
-                      >
-                        &times;
-                      </button>
+
+                {/* Odometer photo */}
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">{t[lang].endUploadPhoto}</label>
+                  <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-700 active:bg-gray-100">
+                    <span className="rounded-lg bg-black px-3 py-1.5 text-xs font-semibold text-white">Choose file</span>
+                    <span className="truncate text-gray-500">
+                      {endMileagePhoto ? endMileagePhoto.name : "No file chosen"}
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="sr-only"
+                      onChange={(e) => setEndMileagePhoto(e.target.files[0])}
+                    />
+                  </label>
+                  {endPreviewUrl && (
+                    <img src={endPreviewUrl} className="mt-3 h-32 w-full rounded-xl border object-cover" alt="Odometer preview" />
+                  )}
+                </div>
+
+                {/* Vehicle photos */}
+                <div>
+                  <div className="mb-1 flex items-center justify-between">
+                    <label className="text-sm font-medium text-gray-700">{t[lang].vehiclePhotos}</label>
+                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                      {endVehiclePhotos.length}/{MAX_VEHICLE_PHOTOS}
+                    </span>
+                  </div>
+                  <p className="mb-2 text-xs text-gray-500">{t[lang].vehiclePhotoInstruction}</p>
+                  <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-700 active:bg-gray-100">
+                    <span className="rounded-lg bg-black px-3 py-1.5 text-xs font-semibold text-white">Choose files</span>
+                    <span className="text-gray-500">No file chosen</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="sr-only"
+                      onChange={(e) => { handleVehiclePhotoAdd("end", e.target.files); e.target.value = ""; }}
+                    />
+                  </label>
+                  {!!endVehiclePhotoPreviews.length && (
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      {endVehiclePhotoPreviews.map((preview, index) => (
+                        <div key={`${preview.url}-${index}`} className="relative overflow-hidden rounded-xl border border-gray-200">
+                          <img src={preview.url} alt={preview.name} className="h-28 w-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => handleVehiclePhotoRemove("end", index)}
+                            className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-xs font-bold text-white"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
-              )}
-              {endPreviewUrl && (
-                <img src={endPreviewUrl} className="mb-4 mt-3 h-40 w-full rounded-lg border object-cover" alt="Ending odometer preview" />
-              )}
-              {endError && <p className="mb-3 text-center text-sm text-red-600">{endError}</p>}
-              <div className="flex justify-end gap-3">
+
+                {endError && (
+                  <p className="rounded-xl bg-red-50 px-4 py-3 text-center text-sm text-red-600">{endError}</p>
+                )}
+              </div>
+
+              {/* Sticky footer */}
+              <div className="flex-shrink-0 flex justify-end gap-3 border-t border-gray-100 bg-white px-6 py-4 rounded-b-3xl">
                 <button
-                  onClick={() => {
-                    setShowEndModal(false);
-                    setEndError("");
-                    setEndMileage("");
-                    setEndMileagePhoto(null);
-                    setEndVehiclePhotos([]);
-                  }}
-                  className="rounded-xl bg-gray-200 px-4 py-2.5 font-medium text-gray-800 hover:bg-gray-300"
+                  onClick={() => { setShowEndModal(false); setEndError(""); setEndMileage(""); setEndMileagePhoto(null); setEndVehiclePhotos([]); }}
+                  className="rounded-xl bg-gray-100 px-5 py-3 text-sm font-medium text-gray-800 hover:bg-gray-200 active:bg-gray-200"
                 >
                   {t[lang].cancel}
                 </button>
                 <button
                   onClick={handleEndShift}
                   disabled={endSubmitting}
-                  className={`rounded-xl px-4 py-2.5 font-semibold text-white ${
-                    endSubmitting ? "bg-gray-500 cursor-not-allowed" : "bg-black hover:bg-gray-900"
-                  }`}
+                  className={`rounded-xl px-5 py-3 text-sm font-semibold text-white ${endSubmitting ? "bg-gray-400 cursor-not-allowed" : "bg-black hover:bg-gray-900 active:bg-gray-800"}`}
                 >
-                  {t[lang].endDuty}
+                  {endSubmitting ? "..." : t[lang].endDuty}
                 </button>
               </div>
             </motion.div>

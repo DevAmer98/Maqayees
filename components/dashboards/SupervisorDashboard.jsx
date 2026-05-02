@@ -565,95 +565,107 @@ export default function SupervisorDashboard() {
 
             {/* Assign */}
             {activeTab === "assign" && (
-              <Card title="Assign Driver to Truck">
-                <form
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    if (!assignment.driver || !assignment.truck) {
-                      setMessage("Please select both a driver and a truck.");
-                      return;
-                    }
-                    setAssigning(true);
+              <div className="space-y-6">
+                {/* Assign form */}
+                <Card title="Assign Driver to Truck">
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      if (!assignment.driver || !assignment.truck) {
+                        setMessage("Please select both a driver and a truck.");
+                        return;
+                      }
+                      setAssigning(true);
+                      try {
+                        const response = await fetch(`/api/trucks/${assignment.truck}`, {
+                          method: "PUT",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ driverId: assignment.driver }),
+                        });
+                        const payload = await response.json();
+                        if (!response.ok || !payload?.success) {
+                          throw new Error(payload?.error || "Failed to assign driver.");
+                        }
+                        const selectedDriver = drivers.find((d) => d.id === assignment.driver);
+                        const selectedTruckItem = trucks.find((t) => t.id === assignment.truck);
+                        setMessage(
+                          `${selectedDriver?.name || "Driver"} assigned to ${selectedTruckItem?.plate || "truck"} successfully.`
+                        );
+                        setAssignment({ driver: "", truck: "" });
+                        setTrucks((prev) =>
+                          prev.map((truck) =>
+                            truck.id === assignment.truck
+                              ? { ...truck, driverName: selectedDriver?.name || "" }
+                              : truck
+                          )
+                        );
+                      } catch (error) {
+                        setMessage(error.message || "Failed to assign driver.");
+                      } finally {
+                        setAssigning(false);
+                      }
+                    }}
+                    className="space-y-4 text-sm"
+                  >
+                    <Select
+                      label="Select Driver"
+                      value={assignment.driver}
+                      onChange={(e) => setAssignment((p) => ({ ...p, driver: e.target.value }))}
+                      options={drivers.map((d) => ({
+                        value: d.id,
+                        label: d.iqama ? `${d.name} (${d.iqama})` : d.name,
+                      }))}
+                      placeholder="-- Choose Driver --"
+                    />
+                    <Select
+                      label="Select Truck"
+                      value={assignment.truck}
+                      onChange={(e) => setAssignment((p) => ({ ...p, truck: e.target.value }))}
+                      options={trucks.map((t) => ({
+                        value: t.id,
+                        label: `${t.plate} — ${t.model}`,
+                      }))}
+                      placeholder="-- Choose Truck --"
+                    />
+                    <button
+                      type="submit"
+                      disabled={assigning || dataLoading}
+                      className="w-full sm:w-auto bg-black hover:bg-gray-900 text-white px-5 py-2 rounded-lg font-semibold text-sm shadow-md transition"
+                    >
+                      {assigning ? "Assigning..." : "Assign"}
+                    </button>
+                    {message && (
+                      <p className={`mt-2 text-sm ${message.includes("successfully") ? "text-green-600" : "text-red-600"}`}>
+                        {message}
+                      </p>
+                    )}
+                  </form>
+                </Card>
+
+                {/* Current assignments table */}
+                <AssignmentsTable
+                  trucks={trucks}
+                  onUnassign={async (truckId) => {
                     try {
-                      const response = await fetch(`/api/trucks/${assignment.truck}`, {
+                      const response = await fetch(`/api/trucks/${truckId}`, {
                         method: "PUT",
-                        headers: {
-                          "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify({ driverId: assignment.driver }),
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ driverId: null }),
                       });
                       const payload = await response.json();
                       if (!response.ok || !payload?.success) {
-                        throw new Error(payload?.error || "Failed to assign driver.");
+                        throw new Error(payload?.error || "Failed to unassign driver.");
                       }
-
-                      const selectedDriver = drivers.find((d) => d.id === assignment.driver);
-                      const selectedTruckItem = trucks.find((t) => t.id === assignment.truck);
-                      setMessage(
-                        `${selectedDriver?.name || "Driver"} assigned to ${selectedTruckItem?.plate || "truck"} successfully.`
-                      );
-                      setAssignment({ driver: "", truck: "" });
                       setTrucks((prev) =>
-                        prev.map((truck) =>
-                          truck.id === assignment.truck
-                            ? { ...truck, driverName: selectedDriver?.name || "" }
-                            : truck
-                        )
+                        prev.map((t) => (t.id === truckId ? { ...t, driverName: "" } : t))
                       );
+                      setMessage("Driver unassigned successfully.");
                     } catch (error) {
-                      setMessage(error.message || "Failed to assign driver.");
-                    } finally {
-                      setAssigning(false);
+                      setMessage(error.message || "Failed to unassign driver.");
                     }
                   }}
-                  className="space-y-4 text-sm"
-                >
-                  <Select
-                    label="Select Driver"
-                    value={assignment.driver}
-                    onChange={(e) =>
-                      setAssignment((p) => ({ ...p, driver: e.target.value }))
-                    }
-                    options={drivers.map((d) => ({
-                      value: d.id,
-                      label: d.iqama ? `${d.name} (${d.iqama})` : d.name,
-                    }))}
-                    placeholder="-- Choose Driver --"
-                  />
-                  <Select
-                    label="Select Truck"
-                    value={assignment.truck}
-                    onChange={(e) =>
-                      setAssignment((p) => ({ ...p, truck: e.target.value }))
-                    }
-                    options={trucks.map((t) => ({
-                      value: t.id,
-                      label: `${t.plate} — ${t.model}`,
-                    }))}
-                    placeholder="-- Choose Truck --"
-                  />
-
-                  <button
-                    type="submit"
-                    disabled={assigning || dataLoading}
-                    className="w-full sm:w-auto bg-black hover:bg-gray-900 text-white px-5 py-2 rounded-lg font-semibold text-sm shadow-md transition"
-                  >
-                    {assigning ? "Assigning..." : "Assign"}
-                  </button>
-
-                  {message && (
-                    <p
-                      className={`mt-2 text-sm ${
-                        message.includes("successfully")
-                          ? "text-green-600"
-                          : "text-red-600"
-                      }`}
-                    >
-                      {message}
-                    </p>
-                  )}
-                </form>
-              </Card>
+                />
+              </div>
             )}
 
             {/* Report */}
@@ -886,6 +898,86 @@ function Select({ label, value, onChange, options, placeholder }) {
         ))}
       </select>
     </div>
+  );
+}
+
+function AssignmentsTable({ trucks, onUnassign }) {
+  const [unassigning, setUnassigning] = useState(null);
+  const assigned = trucks.filter((t) => t.driverName);
+  const unassigned = trucks.filter((t) => !t.driverName);
+
+  async function handleUnassign(truckId) {
+    setUnassigning(truckId);
+    await onUnassign(truckId);
+    setUnassigning(null);
+  }
+
+  return (
+    <Card title="Current Assignments">
+      <p className="text-sm text-gray-500 mb-4">
+        {assigned.length} of {trucks.length} trucks currently have a driver assigned.
+      </p>
+
+      <div className="overflow-x-auto rounded-xl border border-gray-200">
+        <table className="min-w-full text-sm text-left text-gray-800">
+          <thead className="bg-gray-100 text-gray-900">
+            <tr>
+              <th className="py-3 px-4 font-medium">Truck</th>
+              <th className="py-3 px-4 font-medium">Plate</th>
+              <th className="py-3 px-4 font-medium">Driver</th>
+              <th className="py-3 px-4 font-medium">Status</th>
+              <th className="py-3 px-4 font-medium">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {trucks.length ? (
+              [...assigned, ...unassigned].map((truck) => (
+                <tr key={truck.id} className="border-t hover:bg-gray-50 transition">
+                  <td className="py-2.5 px-4 font-medium text-black">{truck.brand || truck.model}</td>
+                  <td className="py-2.5 px-4 font-mono text-xs">{truck.plate}</td>
+                  <td className="py-2.5 px-4">
+                    {truck.driverName ? (
+                      <span className="font-medium text-gray-900">{truck.driverName}</span>
+                    ) : (
+                      <span className="text-gray-400 italic">Unassigned</span>
+                    )}
+                  </td>
+                  <td className="py-2.5 px-4">
+                    {truck.driverName ? (
+                      <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
+                        Assigned
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-500">
+                        Free
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-2.5 px-4">
+                    {truck.driverName ? (
+                      <button
+                        type="button"
+                        onClick={() => handleUnassign(truck.id)}
+                        disabled={unassigning === truck.id}
+                        className="rounded-lg border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-100 transition disabled:opacity-50"
+                      >
+                        {unassigning === truck.id ? "Removing..." : "Unassign"}
+                      </button>
+                    ) : (
+                      <span className="text-gray-300 text-xs">—</span>
+                    )}
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td className="py-4 px-4 text-gray-500" colSpan={5}>No trucks found.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 }
 
