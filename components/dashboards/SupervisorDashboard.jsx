@@ -177,23 +177,6 @@ export default function SupervisorDashboard() {
   const [fuelLogsError, setFuelLogsError] = useState("");
   const [fuelLogsFilter, setFuelLogsFilter] = useState({ vehicleId: "", from: "", to: "" });
 
-  // HR state
-  const [employees, setEmployees] = useState([]);
-  const [hrLoading, setHrLoading] = useState(false);
-  const [employeeForm, setEmployeeForm] = useState({ name: "", jobTitle: "", nationality: "", phone: "", iqama: "", projectName: "" });
-  const [hrMessage, setHrMessage] = useState(null);
-  const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().slice(0, 10));
-  const [attendanceMap, setAttendanceMap] = useState({});
-  const [attendanceSaving, setAttendanceSaving] = useState(false);
-  const [attendanceMessage, setAttendanceMessage] = useState(null);
-
-  // Procurement state
-  const [procurements, setProcurements] = useState([]);
-  const [procLoading, setProcLoading] = useState(false);
-  const [procForm, setProcForm] = useState({ title: "", description: "", quantity: "", unit: "", estimatedCost: "", projectName: "", followUpDate: "", notes: "" });
-  const [procMessage, setProcMessage] = useState(null);
-  const [procSubmitting, setProcSubmitting] = useState(false);
-
   // 🔹 Report Form States
   const [formData, setFormData] = useState({
     truckId: "",
@@ -298,8 +281,6 @@ export default function SupervisorDashboard() {
     { key: "report", label: "Daily Report", icon: "⛽" },
     { key: "fuellogs", label: "Fuel Logs", icon: "🪣" },
     { key: "maintenance", label: "Maintenance", icon: "🛠️" },
-    { key: "hr", label: "HR", icon: "👥" },
-    { key: "procurement", label: "Procurement", icon: "📦" },
     { key: "profile", label: "Profile", icon: "👤" },
   ];
 
@@ -435,41 +416,6 @@ export default function SupervisorDashboard() {
     loadMaintenanceData();
   }, [loadMaintenanceData]);
 
-  const loadEmployees = useCallback(async () => {
-    setHrLoading(true);
-    try {
-      const res = await fetch("/api/hr/employees");
-      const data = await res.json();
-      if (data.success) {
-        setEmployees(data.employees);
-        const map = {};
-        data.employees.forEach((e) => { map[e.id] = "present"; });
-        setAttendanceMap(map);
-      }
-    } finally {
-      setHrLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (activeTab === "hr") loadEmployees();
-  }, [activeTab, loadEmployees]);
-
-  const loadProcurements = useCallback(async () => {
-    setProcLoading(true);
-    try {
-      const res = await fetch("/api/procurement");
-      const data = await res.json();
-      if (data.success) setProcurements(data.requests);
-    } finally {
-      setProcLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (activeTab === "procurement") loadProcurements();
-  }, [activeTab, loadProcurements]);
-
   const loadFuelLogs = useCallback(async (filter = {}) => {
     setFuelLogsLoading(true);
     setFuelLogsError("");
@@ -493,97 +439,6 @@ export default function SupervisorDashboard() {
   useEffect(() => {
     if (activeTab === "fuellogs") loadFuelLogs(fuelLogsFilter);
   }, [activeTab, loadFuelLogs]);
-
-  const handleAddEmployee = async (e) => {
-    e.preventDefault();
-    setHrMessage(null);
-    try {
-      const res = await fetch("/api/hr/employees", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(employeeForm),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setHrMessage({ type: "success", text: "Employee added." });
-        setEmployeeForm({ name: "", jobTitle: "", nationality: "", phone: "", iqama: "", projectName: "" });
-        setEmployees((prev) => [data.employee, ...prev]);
-        setAttendanceMap((prev) => ({ ...prev, [data.employee.id]: "present" }));
-      } else {
-        setHrMessage({ type: "error", text: data.error });
-      }
-    } catch {
-      setHrMessage({ type: "error", text: "Network error." });
-    }
-  };
-
-  const handleSaveAttendance = async () => {
-    setAttendanceSaving(true);
-    setAttendanceMessage(null);
-    try {
-      const records = Object.entries(attendanceMap).map(([employeeId, status]) => ({
-        employeeId,
-        date: attendanceDate,
-        status,
-      }));
-      const res = await fetch("/api/hr/attendance", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ records }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setAttendanceMessage({ type: "success", text: `Attendance saved for ${data.count} employees.` });
-      } else {
-        setAttendanceMessage({ type: "error", text: data.error });
-      }
-    } catch {
-      setAttendanceMessage({ type: "error", text: "Network error." });
-    } finally {
-      setAttendanceSaving(false);
-    }
-  };
-
-  const handleAddProcurement = async (e) => {
-    e.preventDefault();
-    setProcSubmitting(true);
-    setProcMessage(null);
-    try {
-      const res = await fetch("/api/procurement", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(procForm),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setProcMessage({ type: "success", text: "Request submitted." });
-        setProcForm({ title: "", description: "", quantity: "", unit: "", estimatedCost: "", projectName: "", followUpDate: "", notes: "" });
-        setProcurements((prev) => [data.record, ...prev]);
-      } else {
-        setProcMessage({ type: "error", text: data.error });
-      }
-    } catch {
-      setProcMessage({ type: "error", text: "Network error." });
-    } finally {
-      setProcSubmitting(false);
-    }
-  };
-
-  const handleProcStatusChange = async (id, status) => {
-    try {
-      const res = await fetch("/api/procurement", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, status }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setProcurements((prev) => prev.map((r) => (r.id === id ? data.record : r)));
-      }
-    } catch {
-      // silent fail
-    }
-  };
 
   const formatTruckLabel = (truck) => {
     const label = `${truck.model} — ${truck.plate}`;
@@ -960,152 +815,6 @@ export default function SupervisorDashboard() {
               />
             )}
 
-            {activeTab === "hr" && (
-              <div className="space-y-6">
-                <Card title="👥 Add Employee">
-                  <form onSubmit={handleAddEmployee} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Input label="Full Name *" value={employeeForm.name} onChange={(e) => setEmployeeForm((p) => ({ ...p, name: e.target.value }))} required />
-                    <Input label="Job Title" value={employeeForm.jobTitle} onChange={(e) => setEmployeeForm((p) => ({ ...p, jobTitle: e.target.value }))} />
-                    <Input label="Nationality" value={employeeForm.nationality} onChange={(e) => setEmployeeForm((p) => ({ ...p, nationality: e.target.value }))} />
-                    <Input label="Phone" value={employeeForm.phone} onChange={(e) => setEmployeeForm((p) => ({ ...p, phone: e.target.value }))} />
-                    <Input label="Iqama No." value={employeeForm.iqama} onChange={(e) => setEmployeeForm((p) => ({ ...p, iqama: e.target.value }))} />
-                    <Input label="Project" value={employeeForm.projectName} onChange={(e) => setEmployeeForm((p) => ({ ...p, projectName: e.target.value }))} />
-                    {hrMessage && <p className={`sm:col-span-2 text-sm ${hrMessage.type === "success" ? "text-green-600" : "text-red-600"}`}>{hrMessage.text}</p>}
-                    <div className="sm:col-span-2 flex justify-end">
-                      <button type="submit" className="bg-black text-white px-5 py-2 rounded-lg text-sm font-semibold shadow-md hover:bg-gray-900 transition">Add Employee</button>
-                    </div>
-                  </form>
-                </Card>
-
-                <Card title="📅 Daily Attendance">
-                  <div className="flex flex-wrap items-center gap-3 mb-4">
-                    <label className="text-sm font-medium text-gray-800">Date:</label>
-                    <input
-                      type="date"
-                      value={attendanceDate}
-                      onChange={(e) => setAttendanceDate(e.target.value)}
-                      className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm"
-                    />
-                  </div>
-                  {hrLoading ? (
-                    <p className="text-sm text-gray-500">Loading employees...</p>
-                  ) : employees.length === 0 ? (
-                    <p className="text-sm text-gray-500">No employees found. Add employees first.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {employees.map((emp) => (
-                        <div key={emp.id} className="flex flex-wrap items-center justify-between gap-3 border border-gray-200 rounded-lg px-4 py-2">
-                          <div>
-                            <p className="text-sm font-semibold text-gray-900">{emp.name}</p>
-                            <p className="text-xs text-gray-500">{emp.jobTitle || "—"} · {emp.nationality || "—"}</p>
-                          </div>
-                          <select
-                            value={attendanceMap[emp.id] || "present"}
-                            onChange={(e) => setAttendanceMap((prev) => ({ ...prev, [emp.id]: e.target.value }))}
-                            className="border border-gray-300 rounded-lg px-3 py-1 text-sm"
-                          >
-                            <option value="present">Present</option>
-                            <option value="absent">Absent</option>
-                            <option value="late">Late</option>
-                            <option value="half-day">Half Day</option>
-                          </select>
-                        </div>
-                      ))}
-                      {attendanceMessage && <p className={`text-sm ${attendanceMessage.type === "success" ? "text-green-600" : "text-red-600"}`}>{attendanceMessage.text}</p>}
-                      <div className="flex justify-end pt-2">
-                        <button
-                          onClick={handleSaveAttendance}
-                          disabled={attendanceSaving}
-                          className="bg-black text-white px-5 py-2 rounded-lg text-sm font-semibold shadow-md hover:bg-gray-900 transition"
-                        >
-                          {attendanceSaving ? "Saving..." : "Save Attendance"}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </Card>
-              </div>
-            )}
-
-            {activeTab === "procurement" && (
-              <div className="space-y-6">
-                <Card title="📦 New Procurement Request">
-                  <form onSubmit={handleAddProcurement} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="sm:col-span-2">
-                      <Input label="Item / Title *" value={procForm.title} onChange={(e) => setProcForm((p) => ({ ...p, title: e.target.value }))} required />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className="block text-sm font-medium text-gray-800 mb-1">Description</label>
-                      <textarea
-                        rows="2"
-                        value={procForm.description}
-                        onChange={(e) => setProcForm((p) => ({ ...p, description: e.target.value }))}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                        placeholder="Optional details"
-                      />
-                    </div>
-                    <Input label="Quantity" type="number" min="0" step="any" value={procForm.quantity} onChange={(e) => setProcForm((p) => ({ ...p, quantity: e.target.value }))} />
-                    <Input label="Unit (e.g. pcs, kg)" value={procForm.unit} onChange={(e) => setProcForm((p) => ({ ...p, unit: e.target.value }))} />
-                    <Input label="Est. Cost (SAR)" type="number" min="0" step="0.01" value={procForm.estimatedCost} onChange={(e) => setProcForm((p) => ({ ...p, estimatedCost: e.target.value }))} />
-                    <Input label="Project" value={procForm.projectName} onChange={(e) => setProcForm((p) => ({ ...p, projectName: e.target.value }))} />
-                    <Input label="Follow-up Date" type="date" value={procForm.followUpDate} onChange={(e) => setProcForm((p) => ({ ...p, followUpDate: e.target.value }))} />
-                    <Input label="Notes" value={procForm.notes} onChange={(e) => setProcForm((p) => ({ ...p, notes: e.target.value }))} />
-                    {procMessage && <p className={`sm:col-span-2 text-sm ${procMessage.type === "success" ? "text-green-600" : "text-red-600"}`}>{procMessage.text}</p>}
-                    <div className="sm:col-span-2 flex justify-end">
-                      <button type="submit" disabled={procSubmitting} className="bg-black text-white px-5 py-2 rounded-lg text-sm font-semibold shadow-md hover:bg-gray-900 transition">
-                        {procSubmitting ? "Submitting..." : "Submit Request"}
-                      </button>
-                    </div>
-                  </form>
-                </Card>
-
-                <Card title="📋 Procurement Requests">
-                  {procLoading ? (
-                    <p className="text-sm text-gray-500">Loading...</p>
-                  ) : procurements.length === 0 ? (
-                    <p className="text-sm text-gray-500">No procurement requests yet.</p>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="min-w-[640px] w-full text-sm text-left text-gray-800">
-                        <thead className="bg-gray-100">
-                          <tr>
-                            {["Item", "Qty", "Est. Cost", "Project", "Follow-up", "Status"].map((h) => (
-                              <th key={h} className="py-2 px-3 font-medium text-gray-700">{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {procurements.map((r) => (
-                            <tr key={r.id} className="border-b hover:bg-gray-50">
-                              <td className="py-2 px-3">
-                                <p className="font-medium">{r.title}</p>
-                                {r.description && <p className="text-xs text-gray-500">{r.description}</p>}
-                              </td>
-                              <td className="py-2 px-3">{r.quantity ?? "—"} {r.unit || ""}</td>
-                              <td className="py-2 px-3">{r.estimatedCost ? `SAR ${r.estimatedCost}` : "—"}</td>
-                              <td className="py-2 px-3">{r.projectName || "—"}</td>
-                              <td className="py-2 px-3">{r.followUpDate ? new Date(r.followUpDate).toLocaleDateString() : "—"}</td>
-                              <td className="py-2 px-3">
-                                <select
-                                  value={r.status}
-                                  onChange={(e) => handleProcStatusChange(r.id, e.target.value)}
-                                  className="border border-gray-300 rounded px-2 py-1 text-xs"
-                                >
-                                  <option value="pending">Pending</option>
-                                  <option value="ordered">Ordered</option>
-                                  <option value="delivered">Delivered</option>
-                                  <option value="cancelled">Cancelled</option>
-                                </select>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </Card>
-              </div>
-            )}
           </motion.div>
         </AnimatePresence>
       </main>
