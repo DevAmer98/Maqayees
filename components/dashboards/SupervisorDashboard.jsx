@@ -645,6 +645,7 @@ export default function SupervisorDashboard() {
                 {/* Current assignments table */}
                 <AssignmentsTable
                   trucks={trucks}
+                  loading={dataLoading}
                   onUnassign={async (truckId) => {
                     try {
                       const response = await fetch(`/api/trucks/${truckId}`, {
@@ -901,7 +902,7 @@ function Select({ label, value, onChange, options, placeholder }) {
   );
 }
 
-function AssignmentsTable({ trucks, onUnassign }) {
+function AssignmentsTable({ trucks, loading, onUnassign }) {
   const [unassigning, setUnassigning] = useState(null);
   const assigned = trucks.filter((t) => t.driverName);
   const unassigned = trucks.filter((t) => !t.driverName);
@@ -914,9 +915,13 @@ function AssignmentsTable({ trucks, onUnassign }) {
 
   return (
     <Card title="Current Assignments">
+      {loading ? (
+        <p className="text-sm text-gray-500">Loading trucks...</p>
+      ) : (
       <p className="text-sm text-gray-500 mb-4">
         {assigned.length} of {trucks.length} trucks currently have a driver assigned.
       </p>
+      )}
 
       <div className="overflow-x-auto rounded-xl border border-gray-200">
         <table className="min-w-full text-sm text-left text-gray-800">
