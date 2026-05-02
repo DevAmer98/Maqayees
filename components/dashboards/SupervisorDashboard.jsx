@@ -2,6 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import * as XLSX from "xlsx";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Bar,
@@ -167,6 +168,7 @@ export default function SupervisorDashboard() {
     weeklyMileage: [],
     weeklyFuel: [],
     activeDrivers: [],
+    strategy: "daily",
   });
   const [maintenanceRecords, setMaintenanceRecords] = useState([]);
   const [maintenanceLoading, setMaintenanceLoading] = useState(true);
@@ -351,6 +353,7 @@ export default function SupervisorDashboard() {
         weeklyMileage: Array.isArray(payload.data?.weeklyMileage) ? payload.data.weeklyMileage : [],
         weeklyFuel: Array.isArray(payload.data?.weeklyFuel) ? payload.data.weeklyFuel : [],
         activeDrivers: Array.isArray(payload.data?.activeDrivers) ? payload.data.activeDrivers : [],
+        strategy: payload.data?.strategy || "daily",
       });
     } catch (error) {
       setMonitorError(error.message || "Failed to load monitor data.");
@@ -556,6 +559,7 @@ export default function SupervisorDashboard() {
                 monitorData={monitorData}
                 monitorLoading={monitorLoading}
                 monitorError={monitorError}
+                chartStrategy={monitorData.strategy}
               />
             )}
 
@@ -885,17 +889,31 @@ function Select({ label, value, onChange, options, placeholder }) {
   );
 }
 
-function exportToCSV(filename, headers, rows) {
-  const escape = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const lines = [headers.map(escape).join(","), ...rows.map((row) => row.map(escape).join(","))];
-  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+function exportToExcel(filename, sheets) {
+  const wb = XLSX.utils.book_new();
+  sheets.forEach(({ name, headers, rows }) => {
+    const data = [headers, ...rows.map((row) => row.map((v) => v ?? ""))];
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    // Bold the header row
+    const range = XLSX.utils.decode_range(ws["!ref"]);
+    for (let col = range.s.c; col <= range.e.c; col++) {
+      const cell = ws[XLSX.utils.encode_cell({ r: 0, c: col })];
+      if (cell) cell.s = { font: { bold: true } };
+    }
+    // Auto column widths based on content
+    ws["!cols"] = headers.map((h, colIdx) => {
+      const maxLen = Math.max(
+        h.length,
+        ...rows.map((row) => String(row[colIdx] ?? "").length)
+      );
+      return { wch: Math.min(maxLen + 2, 40) };
+    });
+    XLSX.utils.book_append_sheet(wb, ws, name);
+  });
+  XLSX.writeFile(wb, filename);
 }
+
+const STRATEGY_LABEL = { daily: "Daily view", weekly: "Weekly view", monthly: "Monthly view" };
 
 /* --- Monitor Tab Extracted --- */
 function MonitorTab({
@@ -908,35 +926,24 @@ function MonitorTab({
   monitorData,
   monitorLoading,
   monitorError,
+  chartStrategy,
 }) {
   const [localDate, setLocalDate] = useState({ from: dateFilter.from, to: dateFilter.to });
   const visibleDrivers = monitorData.activeDrivers;
 
-  const weeklyMileage =
-    monitorData.weeklyMileage.length > 0
-      ? monitorData.weeklyMileage
-      : [
-          { day: "Sun", mileage: 0 },
-          { day: "Mon", mileage: 0 },
-          { day: "Tue", mileage: 0 },
-          { day: "Wed", mileage: 0 },
-          { day: "Thu", mileage: 0 },
-          { day: "Fri", mileage: 0 },
-          { day: "Sat", mileage: 0 },
-        ];
+  const DEFAULT_MILEAGE = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => ({ day: d, mileage: 0 }));
+  const DEFAULT_FUEL = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => ({ day: d, fuel: 0 }));
 
-  const weeklyFuel =
-    monitorData.weeklyFuel.length > 0
-      ? monitorData.weeklyFuel
-      : [
-          { day: "Sun", fuel: 0 },
-          { day: "Mon", fuel: 0 },
-          { day: "Tue", fuel: 0 },
-          { day: "Wed", fuel: 0 },
-          { day: "Thu", fuel: 0 },
-          { day: "Fri", fuel: 0 },
-          { day: "Sat", fuel: 0 },
-        ];
+  const weeklyMileage = monitorData.weeklyMileage.length > 0 ? monitorData.weeklyMileage : DEFAULT_MILEAGE;
+  const weeklyFuel = monitorData.weeklyFuel.length > 0 ? monitorData.weeklyFuel : DEFAULT_FUEL;
+
+  // Adaptive chart config based on data point count
+  const dataCount = weeklyMileage.length;
+  const xAxisInterval = dataCount > 12 ? Math.ceil(dataCount / 12) - 1 : 0;
+  const xAxisAngle = dataCount > 8 ? -35 : 0;
+  const xAxisHeight = dataCount > 8 ? 50 : 30;
+  const barSize = dataCount > 20 ? 8 : dataCount > 12 ? 14 : undefined;
+  const showDots = dataCount <= 20;
 
   function handleApplyDateFilter() {
     if (localDate.from && localDate.to && localDate.from > localDate.to) return;
@@ -948,30 +955,29 @@ function MonitorTab({
     setDateFilter({ from: "", to: "" });
   }
 
-  function handleExportDriversCSV() {
-    exportToCSV(
-      `fleet-drivers-${new Date().toISOString().slice(0, 10)}.csv`,
-      ["Driver", "Truck", "Status", "Last Update"],
-      visibleDrivers.map((d) => [
-        d.name,
-        d.truck || "Unassigned",
-        d.status,
-        d.lastUpdate && d.lastUpdate !== "—" ? new Date(d.lastUpdate).toLocaleString() : "—",
-      ])
-    );
+  function handleExportDriversExcel() {
+    exportToExcel(`fleet-drivers-${new Date().toISOString().slice(0, 10)}.xlsx`, [
+      {
+        name: "Active Drivers",
+        headers: ["Driver", "Truck", "Status", "Last Update"],
+        rows: visibleDrivers.map((d) => [
+          d.name,
+          d.truck || "Unassigned",
+          d.status,
+          d.lastUpdate && d.lastUpdate !== "—" ? new Date(d.lastUpdate).toLocaleString() : "—",
+        ]),
+      },
+    ]);
   }
 
-  function handleExportChartsCSV() {
-    const rows = weeklyMileage.map((m, i) => [
-      m.day,
-      m.mileage,
-      weeklyFuel[i]?.fuel ?? 0,
+  function handleExportChartsExcel() {
+    exportToExcel(`fleet-weekly-${new Date().toISOString().slice(0, 10)}.xlsx`, [
+      {
+        name: "Weekly Summary",
+        headers: ["Day", "Mileage (km)", "Fuel (L)"],
+        rows: weeklyMileage.map((m, i) => [m.day, m.mileage, weeklyFuel[i]?.fuel ?? 0]),
+      },
     ]);
-    exportToCSV(
-      `fleet-weekly-${new Date().toISOString().slice(0, 10)}.csv`,
-      ["Day", "Mileage (km)", "Fuel (L)"],
-      rows
-    );
   }
 
   const hasDateFilter = dateFilter.from && dateFilter.to;
@@ -1054,34 +1060,39 @@ function MonitorTab({
         <div className="ml-auto flex gap-2">
           <button
             type="button"
-            onClick={handleExportChartsCSV}
+            onClick={handleExportChartsExcel}
             className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100 transition"
           >
-            Export Charts CSV
+            Export Charts (.xlsx)
           </button>
           <button
             type="button"
-            onClick={handleExportDriversCSV}
+            onClick={handleExportDriversExcel}
             className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100 transition"
           >
-            Export Drivers CSV
+            Export Drivers (.xlsx)
           </button>
         </div>
       </div>
 
+      {/* Date range + strategy badge */}
       {hasDateFilter && (
-        <p className="mb-3 text-xs text-gray-500">
-          Showing data from <strong>{dateFilter.from}</strong> to <strong>{dateFilter.to}</strong>
-        </p>
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <span className="text-xs text-gray-500">
+            Showing <strong>{dateFilter.from}</strong> → <strong>{dateFilter.to}</strong>
+          </span>
+          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+            {STRATEGY_LABEL[chartStrategy] || chartStrategy}
+          </span>
+          <span className="text-xs text-gray-400">{dataCount} data point{dataCount !== 1 ? "s" : ""}</span>
+        </div>
       )}
 
       {/* Charts */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6 mb-8">
         {/* Driver Status Pie Chart */}
         <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-          <h3 className="text-md font-semibold text-black mb-3">
-            Driver Status Summary
-          </h3>
+          <h3 className="text-md font-semibold text-black mb-3">Driver Status Summary</h3>
           <ResponsiveContainer width="100%" height={250}>
             <PieChart>
               <Pie
@@ -1090,7 +1101,7 @@ function MonitorTab({
                 cy="50%"
                 outerRadius={80}
                 dataKey="value"
-                label
+                label={({ name, value }) => value > 0 ? `${name}: ${value}` : null}
               >
                 <Cell fill="#16a34a" />
                 <Cell fill="#9ca3af" />
@@ -1101,19 +1112,27 @@ function MonitorTab({
           </ResponsiveContainer>
         </div>
 
-        {/* Weekly Mileage */}
+        {/* Mileage Trend */}
         <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
           <h3 className="text-md font-semibold text-black mb-3">
-            Weekly Mileage Trend (km)
+            {chartStrategy === "monthly" ? "Monthly" : chartStrategy === "weekly" ? "Weekly" : "Daily"} Mileage (km)
           </h3>
           <ResponsiveContainer width="100%" height={250}>
-            <BarChart
-              data={weeklyMileage}
-            >
-              <XAxis dataKey="day" />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="mileage" fill="#111827" radius={[8, 8, 0, 0]} />
+            <BarChart data={weeklyMileage} margin={{ bottom: xAxisAngle !== 0 ? 10 : 0 }}>
+              <XAxis
+                dataKey="day"
+                tick={{ fontSize: 11, angle: xAxisAngle, textAnchor: xAxisAngle !== 0 ? "end" : "middle" }}
+                height={xAxisHeight}
+                interval={xAxisInterval}
+              />
+              <YAxis tick={{ fontSize: 11 }} width={40} />
+              <Tooltip formatter={(v) => [`${v} km`, "Mileage"]} />
+              <Bar
+                dataKey="mileage"
+                fill="#111827"
+                radius={[4, 4, 0, 0]}
+                maxBarSize={barSize ?? 40}
+              />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -1121,22 +1140,25 @@ function MonitorTab({
         {/* Fuel Consumption */}
         <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
           <h3 className="text-md font-semibold text-black mb-3">
-            Weekly Fuel Consumption (L)
+            {chartStrategy === "monthly" ? "Monthly" : chartStrategy === "weekly" ? "Weekly" : "Daily"} Fuel (L)
           </h3>
           <ResponsiveContainer width="100%" height={250}>
-            <LineChart
-              data={weeklyFuel}
-            >
-              <XAxis dataKey="day" />
-              <YAxis />
-              <Tooltip />
+            <LineChart data={weeklyFuel} margin={{ bottom: xAxisAngle !== 0 ? 10 : 0 }}>
+              <XAxis
+                dataKey="day"
+                tick={{ fontSize: 11, angle: xAxisAngle, textAnchor: xAxisAngle !== 0 ? "end" : "middle" }}
+                height={xAxisHeight}
+                interval={xAxisInterval}
+              />
+              <YAxis tick={{ fontSize: 11 }} width={40} />
+              <Tooltip formatter={(v) => [`${v} L`, "Fuel"]} />
               <Line
                 type="monotone"
                 dataKey="fuel"
                 stroke="#f97316"
-                strokeWidth={3}
-                dot={{ r: 4 }}
-                activeDot={{ r: 6 }}
+                strokeWidth={2}
+                dot={showDots ? { r: 3 } : false}
+                activeDot={{ r: 5 }}
                 name="Fuel Used"
               />
             </LineChart>
