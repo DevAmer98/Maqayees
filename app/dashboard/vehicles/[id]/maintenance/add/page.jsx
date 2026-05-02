@@ -3,11 +3,12 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { usePreferredLanguage } from "@/lib/usePreferredLanguage";
 
 export default function AddMaintenancePage() {
   const { id } = useParams();
 
-  const [lang, setLang] = useState("en");
+  const [lang, setLang] = usePreferredLanguage("en");
   const [formData, setFormData] = useState({
     date: "",
     mileage: "",

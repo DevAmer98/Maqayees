@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import LogoutButton from "@/components/ui/LogoutButton";
+import { usePreferredLanguage } from "@/lib/usePreferredLanguage";
 
 const SPARE_PART_TYPES = new Set(["repair"]);
 
@@ -121,7 +122,7 @@ const normalizeRepairRows = (rows) => {
 };
 
 export default function MaintenanceDashboard() {
-  const [lang, setLang] = useState("en");
+  const [lang, setLang] = usePreferredLanguage("en");
   const [activeTab, setActiveTab] = useState("requests");
   const [requests, setRequests] = useState([]);
   const initialSelectedId = useMemo(

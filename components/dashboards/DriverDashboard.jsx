@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import LogoutButton from "@/components/ui/LogoutButton";
+import { usePreferredLanguage } from "@/lib/usePreferredLanguage";
 
 const MAX_VEHICLE_PHOTOS = 4;
 const SHIFT_UPLOAD_HANDLE_URL = "/api/uploads/shifts";
@@ -220,7 +221,7 @@ const formatChecklistDateTime = (value) => {
 
 export default function DriverDashboard() {
   const [onShift, setOnShift] = useState(false);
-  const [lang, setLang] = useState("en");
+  const [lang, setLang] = usePreferredLanguage("en");
   const [showStartModal, setShowStartModal] = useState(false);
   const [showEndModal, setShowEndModal] = useState(false);
   const [startMileage, setStartMileage] = useState("");
